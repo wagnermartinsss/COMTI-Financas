@@ -61,69 +61,58 @@ export default function Settings() {
   }, [user]);
 
   const handleSendInvite = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
+  e.preventDefault();
+  if (!user) return;
 
-    if (inviteEmail === user.email) {
-      toast.error('Você não pode convidar a si mesmo.');
+  if (inviteEmail === user.email) {
+    toast.error('Você não pode convidar a si mesmo.');
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    // Check if invite already exists
+    const q = query(
+      collection(db, 'invites'),
+      where('ownerId', '==', user.uid),
+      where('email', '==', inviteEmail)
+    );
+    const snapshot = await getDocs(q);
+    
+    if (!snapshot.empty) {
+      toast.error('Você já enviou um convite para este email.');
+      setLoading(false);
       return;
     }
 
-    setLoading(true);
+    // 🔥 CRIA O CONVITE
+    const docRef = await addDoc(collection(db, 'invites'), {
+      email: inviteEmail,
+      ownerId: user.uid,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    });
 
-    try {
-      // Check if invite already exists
-      const q = query(
-        collection(db, 'invites'),
-        where('ownerId', '==', user.uid),
-        where('email', '==', inviteEmail)
-      );
-      const snapshot = await getDocs(q);
-      
-      if (!snapshot.empty) {
-        toast.error('Você já enviou um convite para este email.');
-        setLoading(false);
-        return;
-      }
+    // 🔥 GERA LINK
+    const inviteLink = `${window.location.origin}/invite/${docRef.id}`;
 
-      const docRef = await addDoc(collection(db, 'invites'), {
-        email: inviteEmail,
-        ownerId: user.uid,
-        status: 'pending',
-        createdAt: new Date().toISOString()
-      });
+    // 🔥 COPIA AUTOMATICAMENTE
+    await navigator.clipboard.writeText(inviteLink);
 
-      // Call backend to send email
-      try {
-        const response = await fetch('/api/send-invite', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email: inviteEmail,
-            inviteId: docRef.id,
-            ownerName: userProfile?.name || user.email,
-            appUrl: window.location.origin
-          }),
-        });
+    // 🔥 LIMPA CAMPO
+    setInviteEmail('');
 
-        if (!response.ok) {
-          console.warn('Failed to send email, but invite was created in database');
-        }
-      } catch (err) {
-        console.error('Error calling send-invite API:', err);
-      }
+    // 🔥 FEEDBACK
+    toast.success('Convite criado! Link copiado para a área de transferência.');
 
-      setInviteEmail('');
-      toast.success('Convite enviado com sucesso!');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'invites');
-      toast.error('Erro ao enviar convite.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, 'invites');
+    toast.error('Erro ao enviar convite.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleAcceptInvite = async (invite: Invite) => {
     if (!user) return;
