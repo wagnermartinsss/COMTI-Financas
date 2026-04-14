@@ -250,15 +250,13 @@ export default function Reports() {
       }
     }
 
-  const blob = doc.output('blob');
+ const blob = doc.output('blob');
 const url = URL.createObjectURL(blob);
 
-// 🔥 abre corretamente
-const newWindow = window.open(url);
-
-if (!newWindow) {
-  // fallback se popup bloquear
-  window.location.href = url;
+if (/Mobi|Android|iPhone/i.test(navigator.userAgent)) {
+  window.location.href = url; // mobile
+} else {
+  window.open(url, '_blank'); // desktop
 }
     toast.success('Relatório PDF exportado!');
   };
