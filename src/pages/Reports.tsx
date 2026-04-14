@@ -250,7 +250,16 @@ export default function Reports() {
       }
     }
 
-    doc.save(`relatorio_${startDate}_a_${endDate}.pdf`);
+  const blob = doc.output('blob');
+const url = URL.createObjectURL(blob);
+
+// 🔥 abre corretamente
+const newWindow = window.open(url);
+
+if (!newWindow) {
+  // fallback se popup bloquear
+  window.location.href = url;
+}
     toast.success('Relatório PDF exportado!');
   };
 
