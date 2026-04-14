@@ -188,15 +188,15 @@ export default function Dashboard() {
 
         <div className="p-6">
           {pieData.length > 0 ? (
-            <div className="h-[320px] w-full">
+            <div className="h-[360px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={pieData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={70}
-                    outerRadius={isMobile ? 90 : 110}
+                    innerRadius={isMobile ? 60 : 70}
+                    outerRadius={isMobile ? 110 : 110}
                     paddingAngle={2}
                     dataKey="value"
                     stroke="none"
@@ -213,14 +213,11 @@ export default function Dashboard() {
                     verticalAlign={isMobile ? "bottom" : "middle"}
                     align={isMobile ? "center" : "right"}
                     iconType="circle"
-                    formatter={(value, entry: any) => (
-                      <span className="text-gray-700 font-medium ml-1">
-                        {value}{' '}
-                        <span className="text-gray-400 font-normal text-sm ml-1">
-                          ({entry.payload.percentage.toFixed(1)}%)
-                        </span>
-                      </span>
-                    )}
+     formatter={(value, entry: any) => (
+  <span className="text-gray-700 text-sm">
+    {value} ({entry.payload.percentage.toFixed(1)}%)
+  </span>
+)}
                   />
                 </PieChart>
               </ResponsiveContainer>
