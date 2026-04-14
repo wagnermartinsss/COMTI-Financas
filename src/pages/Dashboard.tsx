@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePeriod } from '../contexts/PeriodContext';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType, auth } from '../lib/firebase';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { formatCurrency } from '../lib/utils';
 import { ArrowDownCircle, ArrowUpCircle, Wallet, RefreshCw, PieChart as PieChartIcon } from 'lucide-react';
@@ -60,7 +60,9 @@ export default function Dashboard() {
         setTransactions(data);
         setLoading(false);
       }, (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'transactions');
+        if (auth.currentUser) {
+          handleFirestoreError(error, OperationType.LIST, 'transactions');
+        }
       });
     };
 

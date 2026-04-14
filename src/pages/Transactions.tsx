@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePeriod } from '../contexts/PeriodContext';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { db, handleFirestoreError, OperationType, auth } from '../lib/firebase';
 import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, addDoc } from 'firebase/firestore';
 import { formatCurrency } from '../lib/utils';
 import { Plus, Trash2, ArrowUpCircle, ArrowDownCircle, RefreshCw, CalendarPlus } from 'lucide-react';
@@ -54,7 +54,9 @@ export default function Transactions() {
       setTransactions(data);
       setLoading(false);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'transactions');
+      if (auth.currentUser) {
+        handleFirestoreError(error, OperationType.LIST, 'transactions');
+      }
     });
 
     return () => unsubscribe();

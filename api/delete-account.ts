@@ -1,6 +1,19 @@
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import fs from 'fs';
+import path from 'path';
+
+// Load Firebase config
+let firebaseConfig: any = {};
+try {
+  const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+  if (fs.existsSync(configPath)) {
+    firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  }
+} catch (err) {
+  console.warn('Could not load firebase-applet-config.json', err);
+}
 
 // Initialize Firebase Admin
 if (!getApps().length) {
@@ -8,17 +21,20 @@ if (!getApps().length) {
     if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
       const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
       initializeApp({
-        credential: cert(serviceAccount)
+        credential: cert(serviceAccount),
+        projectId: firebaseConfig.projectId
       });
     } else {
-      initializeApp();
+      initializeApp({
+        projectId: firebaseConfig.projectId
+      });
     }
   } catch (error) {
     console.error('Firebase admin initialization error', error);
   }
 }
 
-const db = getFirestore();
+const db = firebaseConfig.firestoreDatabaseId ? getFirestore(firebaseConfig.firestoreDatabaseId) : getFirestore();
 const auth = getAuth();
 
 export default async function handler(req: any, res: any) {

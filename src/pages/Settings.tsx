@@ -193,14 +193,48 @@ export default function Settings() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to delete account');
+        console.warn('API deletion failed, falling back to client-side deletion');
+        
+        // Fallback: Delete data using client SDK
+        const uid = user.uid;
+        
+        // 1. Remove partner links
+        const usersQuery = query(collection(db, 'users'), where('partnerId', '==', uid));
+        const usersSnapshot = await getDocs(usersQuery);
+        for (const userDoc of usersSnapshot.docs) {
+          await updateDoc(doc(db, 'users', userDoc.id), {
+            partnerId: null,
+            partnerEmail: null
+          });
+        }
+
+        // 2. Delete collections
+        const collectionsToDelete = ['transactions', 'recurringTransactions', 'invites', 'categories'];
+        for (const collectionName of collectionsToDelete) {
+          const q = query(collection(db, collectionName), where('ownerId', '==', uid));
+          const snapshot = await getDocs(q);
+          for (const docSnapshot of snapshot.docs) {
+            await deleteDoc(doc(db, collectionName, docSnapshot.id));
+          }
+        }
+
+        // 3. Delete user document
+        await deleteDoc(doc(db, 'users', uid));
+
+        // 4. Delete Auth user
+        await user.delete();
       }
 
       toast.success('Conta excluída com sucesso.');
       // The user will be automatically logged out by Firebase Auth state change
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting account:', error);
-      toast.error('Erro ao excluir conta. Tente novamente.');
+      // If it's a requires-recent-login error, we should tell the user
+      if (error.code === 'auth/requires-recent-login') {
+        toast.error('Por segurança, faça login novamente antes de excluir a conta.');
+      } else {
+        toast.error('Erro ao excluir conta. Tente novamente.');
+      }
       setIsDeletingAccount(false);
       setShowDeleteAccountModal(false);
     }

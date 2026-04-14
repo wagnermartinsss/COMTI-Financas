@@ -61,7 +61,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setUserProfile(doc.data() as UserProfile);
             }
           }, (error) => {
-            handleFirestoreError(error, OperationType.GET, `users/${currentUser.uid}`);
+            if (auth.currentUser) {
+              handleFirestoreError(error, OperationType.GET, `users/${currentUser.uid}`);
+            }
           });
 
         } catch (error) {
