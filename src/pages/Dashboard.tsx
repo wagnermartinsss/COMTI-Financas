@@ -33,13 +33,15 @@ export default function Dashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | undefined>();
 
+  // 🔥 DETECTA MOBILE
+  const isMobile = window.innerWidth < 768;
+
   useEffect(() => {
     if (!ownerId) return;
 
     let unsubscribe: () => void;
 
     const init = async () => {
-      // Process recurring transactions when dashboard loads
       setProcessingRecurrences(true);
       await processRecurringTransactions(ownerId);
       setProcessingRecurrences(false);
@@ -136,7 +138,6 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Saldo Total */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
           <div className="flex items-center gap-4 mb-4">
             <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center">
@@ -149,7 +150,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Receitas */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
           <div className="flex items-center gap-4 mb-4">
             <div className="w-12 h-12 bg-green-50 rounded-full flex items-center justify-center">
@@ -162,7 +162,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Despesas */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
           <div className="flex items-center gap-4 mb-4">
             <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center">
@@ -186,6 +185,7 @@ export default function Dashboard() {
             </span>
           )}
         </div>
+
         <div className="p-6">
           {pieData.length > 0 ? (
             <div className="h-[320px] w-full">
@@ -196,7 +196,7 @@ export default function Dashboard() {
                     cx="50%"
                     cy="50%"
                     innerRadius={70}
-                    outerRadius={110}
+                    outerRadius={isMobile ? 90 : 110}
                     paddingAngle={2}
                     dataKey="value"
                     stroke="none"
@@ -205,15 +205,20 @@ export default function Dashboard() {
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
+
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend 
-                    layout="vertical" 
-                    verticalAlign="middle" 
-                    align="right"
+
+                  <Legend
+                    layout={isMobile ? "horizontal" : "vertical"}
+                    verticalAlign={isMobile ? "bottom" : "middle"}
+                    align={isMobile ? "center" : "right"}
                     iconType="circle"
                     formatter={(value, entry: any) => (
                       <span className="text-gray-700 font-medium ml-1">
-                        {value} <span className="text-gray-400 font-normal text-sm ml-1">({entry.payload.percentage.toFixed(1)}%)</span>
+                        {value}{' '}
+                        <span className="text-gray-400 font-normal text-sm ml-1">
+                          ({entry.payload.percentage.toFixed(1)}%)
+                        </span>
                       </span>
                     )}
                   />
