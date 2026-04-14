@@ -8,6 +8,29 @@ dotenv.config();
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+
+// Initialize Firebase Admin
+if (!getApps().length) {
+  try {
+    if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+      initializeApp({
+        credential: cert(serviceAccount)
+      });
+    } else {
+      initializeApp();
+    }
+  } catch (error) {
+    console.error('Firebase admin initialization error', error);
+  }
+}
+
+const db = getFirestore();
+const adminAuth = getAuth();
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -68,6 +91,57 @@ async function startServer() {
     } catch (error) {
       console.error("Failed to send email:", error);
       res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/delete-account", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const idToken = authHeader.split('Bearer ')[1];
+      const decodedToken = await adminAuth.verifyIdToken(idToken);
+      const uid = decodedToken.uid;
+
+      // 1. Remove partner links where this user is the owner
+      const linkedUsersSnapshot = await db.collection('users').where('partnerId', '==', uid).get();
+      if (!linkedUsersSnapshot.empty) {
+        const linkedBatch = db.batch();
+        linkedUsersSnapshot.docs.forEach((doc) => {
+          linkedBatch.update(doc.ref, {
+            partnerId: FieldValue.delete(),
+            partnerEmail: FieldValue.delete()
+          });
+        });
+        await linkedBatch.commit();
+      }
+
+      // 2. Delete user data in collections
+      const collectionsToDelete = ['transactions', 'recurringTransactions', 'invites', 'categories'];
+      
+      for (const collectionName of collectionsToDelete) {
+        const snapshot = await db.collection(collectionName).where('ownerId', '==', uid).get();
+        if (!snapshot.empty) {
+          const batch = db.batch();
+          snapshot.docs.forEach((doc) => {
+            batch.delete(doc.ref);
+          });
+          await batch.commit();
+        }
+      }
+
+      // 3. Delete user document
+      await db.collection('users').doc(uid).delete();
+
+      // 4. Delete user from Firebase Auth
+      await adminAuth.deleteUser(uid);
+
+      res.status(200).json({ success: true, message: 'Account deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 

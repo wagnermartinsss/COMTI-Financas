@@ -20,6 +20,8 @@ export default function Settings() {
   const [receivedInvites, setReceivedInvites] = useState<Invite[]>([]);
   const [loading, setLoading] = useState(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -177,6 +179,33 @@ export default function Settings() {
     }
   };
 
+  const handleConfirmDeleteAccount = async () => {
+    if (!user) return;
+    setIsDeletingAccount(true);
+
+    try {
+      const idToken = await user.getIdToken();
+      const response = await fetch('/api/delete-account', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete account');
+      }
+
+      toast.success('Conta excluída com sucesso.');
+      // The user will be automatically logged out by Firebase Auth state change
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      toast.error('Erro ao excluir conta. Tente novamente.');
+      setIsDeletingAccount(false);
+      setShowDeleteAccountModal(false);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-3xl">
       <h1 className="text-2xl font-bold text-gray-900">Configurações</h1>
@@ -295,6 +324,21 @@ export default function Settings() {
           </div>
         </div>
       )}
+
+      {/* Zona de Perigo */}
+      <div className="bg-white rounded-2xl shadow-sm border border-red-100 p-6">
+        <h2 className="text-lg font-semibold text-red-600 mb-2">Zona de Perigo</h2>
+        <p className="text-sm text-gray-500 mb-6">
+          A exclusão da conta é permanente e não pode ser desfeita. Todos os seus dados, transações e categorias serão apagados.
+        </p>
+        <button
+          onClick={() => setShowDeleteAccountModal(true)}
+          className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+        >
+          Deletar Minha Conta
+        </button>
+      </div>
+
       {/* Modals */}
       {showDisconnectModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
@@ -315,6 +359,32 @@ export default function Settings() {
                 className="px-4 py-2 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors"
               >
                 Desconectar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showDeleteAccountModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
+            <h3 className="text-lg font-bold text-red-600 mb-2">Deletar Conta</h3>
+            <p className="text-gray-600 mb-6">
+              Esta ação é <strong>irreversível</strong>. Todos os seus dados serão apagados permanentemente. Tem certeza que deseja continuar?
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowDeleteAccountModal(false)}
+                disabled={isDeletingAccount}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl font-medium transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmDeleteAccount}
+                disabled={isDeletingAccount}
+                className="px-4 py-2 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {isDeletingAccount ? 'Deletando...' : 'Sim, deletar conta'}
               </button>
             </div>
           </div>
