@@ -115,7 +115,7 @@ export default function Dashboard() {
         <div className="bg-white p-3 border border-gray-100 shadow-lg rounded-xl">
           <p className="font-semibold text-gray-900 mb-1">{data.name}</p>
           <p className="text-red-600 font-medium">{formatCurrency(data.value)}</p>
-          <p className="text-sm text-gray-500">{data.percentage.toFixed(1)}% das despesas</p>
+          <p className="text-sm text-gray-500">{data.percentage.toFixed(1)}%</p>
         </div>
       );
     }
@@ -176,14 +176,20 @@ export default function Dashboard() {
 
                   <Tooltip content={<CustomTooltip />} />
 
+                  {/* ✅ PORCENTAGEM CORRETA */}
                   <Legend
                     layout={isMobile ? "horizontal" : "vertical"}
                     verticalAlign={isMobile ? "bottom" : "middle"}
                     align={isMobile ? "center" : "right"}
                     iconType="circle"
-                    formatter={(value) => (
-                      <span className="text-gray-700 text-sm">{value}</span>
-                    )}
+                    formatter={(value: string) => {
+                      const item = pieData.find(p => p.name === value);
+                      return (
+                        <span className="text-gray-700 text-sm">
+                          {value} ({item?.percentage.toFixed(1)}%)
+                        </span>
+                      );
+                    }}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -203,7 +209,6 @@ export default function Dashboard() {
   );
 }
 
-// COMPONENTES AUXILIARES (mantém layout limpo)
 function Card({ icon, label, value }: any) {
   return (
     <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
