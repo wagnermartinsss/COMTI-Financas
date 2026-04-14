@@ -1,0 +1,240 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a user in the system.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "The user's email address."
+        },
+        "partnerId": {
+          "type": "string",
+          "description": "The ID of the user's partner, if any."
+        },
+        "partnerEmail": {
+          "type": "string",
+          "format": "email",
+          "description": "The email of the user's partner, if any."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the user was created."
+        }
+      },
+      "required": ["email", "createdAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "A financial transaction (income or expense).",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "The ID of the shared space owner."
+        },
+        "creatorId": {
+          "type": "string",
+          "description": "The ID of the user who created the transaction."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["income", "expense"],
+          "description": "Whether this is an income or expense."
+        },
+        "amount": {
+          "type": "number",
+          "description": "The amount of the transaction."
+        },
+        "category": {
+          "type": "string",
+          "description": "The category of the transaction."
+        },
+        "description": {
+          "type": "string",
+          "description": "A description of the transaction."
+        },
+        "date": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The date the transaction occurred."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the transaction was recorded."
+        },
+        "recurringId": {
+          "type": "string",
+          "description": "The ID of the recurring transaction template, if applicable."
+        },
+        "isPending": {
+          "type": "boolean",
+          "description": "Whether the transaction amount is pending (variable amount)."
+        }
+      },
+      "required": ["ownerId", "creatorId", "type", "amount", "category", "description", "date", "createdAt"]
+    },
+    "RecurringTransaction": {
+      "title": "RecurringTransaction",
+      "description": "A template for recurring financial transactions.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "The ID of the shared space owner."
+        },
+        "creatorId": {
+          "type": "string",
+          "description": "The ID of the user who created the transaction."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["income", "expense"],
+          "description": "Whether this is an income or expense."
+        },
+        "amount": {
+          "type": "number",
+          "description": "The amount of the transaction."
+        },
+        "category": {
+          "type": "string",
+          "description": "The category of the transaction."
+        },
+        "description": {
+          "type": "string",
+          "description": "A description of the transaction."
+        },
+        "frequency": {
+          "type": "string",
+          "enum": ["weekly", "monthly", "yearly"],
+          "description": "How often the transaction repeats."
+        },
+        "startDate": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The date the recurrence starts."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the template was created."
+        },
+        "isVariableAmount": {
+          "type": "boolean",
+          "description": "Whether the recurring transaction has a variable amount."
+        }
+      },
+      "required": ["ownerId", "creatorId", "type", "amount", "category", "description", "frequency", "startDate", "createdAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "A transaction category.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the category."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["income", "expense"],
+          "description": "Whether this is an income or expense category."
+        },
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user who owns this category. Null for default categories."
+        }
+      },
+      "required": ["name", "type"]
+    },
+    "Invite": {
+      "title": "Invite",
+      "description": "An invitation to share a financial space.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "The email of the invited person."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "The ID of the person sending the invite."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "accepted", "rejected"],
+          "description": "The status of the invite."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the invite was created."
+        }
+      },
+      "required": ["email", "ownerId", "status", "createdAt"]
+    },
+    "RecurringSkip": {
+      "title": "RecurringSkip",
+      "description": "Records when a recurring transaction is skipped for a specific month.",
+      "type": "object",
+      "properties": {
+        "recurringId": {
+          "type": "string",
+          "description": "The ID of the recurring transaction template."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "The ID of the shared space owner."
+        },
+        "month": {
+          "type": "string",
+          "description": "The month in YYYY-MM format."
+        }
+      },
+      "required": ["recurringId", "ownerId", "month"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/User"
+      },
+      "description": "Stores user profiles."
+    },
+    "/transactions/{transactionId}": {
+      "schema": {
+        "$ref": "#/entities/Transaction"
+      },
+      "description": "Stores all financial transactions."
+    },
+    "/recurringTransactions/{recurringId}": {
+      "schema": {
+        "$ref": "#/entities/RecurringTransaction"
+      },
+      "description": "Stores recurring transaction templates."
+    },
+    "/categories/{categoryId}": {
+      "schema": {
+        "$ref": "#/entities/Category"
+      },
+      "description": "Stores transaction categories."
+    },
+    "/invites/{inviteId}": {
+      "schema": {
+        "$ref": "#/entities/Invite"
+      },
+      "description": "Stores partner invitations."
+    },
+    "/recurringSkips/{skipId}": {
+      "schema": {
+        "$ref": "#/entities/RecurringSkip"
+      },
+      "description": "Stores skips for recurring transactions."
+    }
+  }
+}

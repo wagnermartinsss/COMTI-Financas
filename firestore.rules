@@ -1,0 +1,165 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasPartner(partnerId) {
+      let userDoc = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(userDoc) && get(userDoc).data.partnerId == partnerId;
+    }
+
+    function isSpaceOwner(ownerId) {
+      return isAuthenticated() && (request.auth.uid == ownerId || hasPartner(ownerId));
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.keys().hasOnly(['name', 'email', 'partnerId', 'partnerEmail', 'createdAt', 'onboardingCompleted']) &&
+             (!('name' in data) || data.name is string) &&
+             data.email is string && isValidEmail(data.email) &&
+             data.createdAt is string &&
+             (!('onboardingCompleted' in data) || data.onboardingCompleted is bool) &&
+             (!('partnerId' in data) || data.partnerId is string) &&
+             (!('partnerEmail' in data) || (data.partnerEmail is string && isValidEmail(data.partnerEmail)));
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['ownerId', 'creatorId', 'type', 'amount', 'category', 'description', 'date', 'createdAt']) &&
+             data.ownerId is string &&
+             data.creatorId is string &&
+             data.type in ['income', 'expense'] &&
+             data.amount is number && data.amount >= 0 &&
+             data.category is string && data.category.size() > 0 && data.category.size() <= 100 &&
+             data.description is string && data.description.size() <= 500 &&
+             data.date is string &&
+             data.createdAt is string &&
+             (!('recurringId' in data) || data.recurringId is string) &&
+             (!('isPending' in data) || data.isPending is bool);
+    }
+
+    function isValidRecurringTransaction(data) {
+      return data.keys().hasAll(['ownerId', 'creatorId', 'type', 'amount', 'category', 'description', 'frequency', 'startDate', 'createdAt']) &&
+             data.ownerId is string &&
+             data.creatorId is string &&
+             data.type in ['income', 'expense'] &&
+             data.amount is number && data.amount >= 0 &&
+             data.category is string && data.category.size() > 0 && data.category.size() <= 100 &&
+             data.description is string && data.description.size() <= 500 &&
+             data.frequency in ['weekly', 'monthly', 'yearly'] &&
+             data.startDate is string &&
+             data.createdAt is string &&
+             (!('isVariableAmount' in data) || data.isVariableAmount is bool);
+    }
+
+    function isValidCategory(data) {
+      return data.keys().hasOnly(['name', 'type', 'ownerId', 'color']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 50 &&
+             data.type in ['income', 'expense'] &&
+             (!('color' in data) || data.color is string) &&
+             (data.ownerId == null || data.ownerId is string);
+    }
+
+    function isValidInvite(data) {
+      return data.keys().hasOnly(['email', 'ownerId', 'status', 'createdAt']) &&
+             data.email is string && isValidEmail(data.email) &&
+             data.ownerId is string &&
+             data.status in ['pending', 'accepted', 'rejected'] &&
+             data.createdAt is string;
+    }
+
+    function isValidRecurringSkip(data) {
+      return data.keys().hasOnly(['recurringId', 'ownerId', 'month']) &&
+             data.recurringId is string &&
+             data.ownerId is string &&
+             data.month is string && data.month.matches("^\\d{4}-\\d{2}$");
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || hasPartner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                    request.resource.data.email == resource.data.email && 
+                    request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isSpaceOwner(resource.data.ownerId);
+      allow create: if isSpaceOwner(request.resource.data.ownerId) && 
+                    request.resource.data.creatorId == request.auth.uid &&
+                    isValidTransaction(request.resource.data);
+      allow update: if isSpaceOwner(resource.data.ownerId) && 
+                    isSpaceOwner(request.resource.data.ownerId) &&
+                    isValidTransaction(request.resource.data) &&
+                    request.resource.data.ownerId == resource.data.ownerId &&
+                    request.resource.data.creatorId == resource.data.creatorId &&
+                    request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if resource == null || isSpaceOwner(resource.data.ownerId);
+    }
+
+    match /recurringTransactions/{recurringId} {
+      allow read: if isSpaceOwner(resource.data.ownerId);
+      allow create: if isSpaceOwner(request.resource.data.ownerId) && 
+                    request.resource.data.creatorId == request.auth.uid &&
+                    isValidRecurringTransaction(request.resource.data);
+      allow update: if isSpaceOwner(resource.data.ownerId) && 
+                    isSpaceOwner(request.resource.data.ownerId) &&
+                    isValidRecurringTransaction(request.resource.data) &&
+                    request.resource.data.ownerId == resource.data.ownerId &&
+                    request.resource.data.creatorId == resource.data.creatorId &&
+                    request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if resource == null || isSpaceOwner(resource.data.ownerId);
+    }
+
+    match /recurringSkips/{skipId} {
+      allow read: if isSpaceOwner(resource.data.ownerId);
+      allow create: if isSpaceOwner(request.resource.data.ownerId) && isValidRecurringSkip(request.resource.data);
+      allow update, delete: if isSpaceOwner(resource.data.ownerId);
+    }
+
+    match /categories/{categoryId} {
+      allow read: if isAuthenticated() && (resource.data.ownerId == null || isSpaceOwner(resource.data.ownerId));
+      allow create: if isSpaceOwner(request.resource.data.ownerId) && isValidCategory(request.resource.data);
+      allow update, delete: if isSpaceOwner(resource.data.ownerId);
+    }
+
+    match /invites/{inviteId} {
+      allow get: if true;
+      allow list: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || resource.data.email == request.auth.token.email);
+      allow create: if isOwner(request.resource.data.ownerId) && isValidInvite(request.resource.data);
+      allow update: if isAuthenticated() && 
+                    (resource.data.ownerId == request.auth.uid || resource.data.email == request.auth.token.email) &&
+                    isValidInvite(request.resource.data) &&
+                    request.resource.data.ownerId == resource.data.ownerId &&
+                    request.resource.data.email == resource.data.email &&
+                    request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || resource.data.email == request.auth.token.email);
+    }
+  }
+}
