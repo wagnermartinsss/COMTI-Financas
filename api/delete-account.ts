@@ -20,6 +20,10 @@ if (!getApps().length) {
   try {
     if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
       const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+
+      // 🔥 CORREÇÃO IMPORTANTE (quebra de linha da private key)
+      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+
       initializeApp({
         credential: cert(serviceAccount),
         projectId: firebaseConfig.projectId
@@ -34,8 +38,36 @@ if (!getApps().length) {
   }
 }
 
-const db = firebaseConfig.firestoreDatabaseId ? getFirestore(firebaseConfig.firestoreDatabaseId) : getFirestore();
+const db = firebaseConfig.firestoreDatabaseId
+  ? getFirestore(firebaseConfig.firestoreDatabaseId)
+  : getFirestore();
+
 const auth = getAuth();
+
+// 🔥 Função robusta para deletar coleções (com limite de 500)
+async function deleteCollection(collectionName: string, field: string, value: string) {
+  const snapshot = await db.collection(collectionName).where(field, '==', value).get();
+
+  if (snapshot.empty) return;
+
+  let batch = db.batch();
+  let count = 0;
+
+  for (const doc of snapshot.docs) {
+    batch.delete(doc.ref);
+    count++;
+
+    if (count === 500) {
+      await batch.commit();
+      batch = db.batch();
+      count = 0;
+    }
+  }
+
+  if (count > 0) {
+    await batch.commit();
+  }
+}
 
 export default async function handler(req: any, res: any) {
   // CORS headers for Vercel
@@ -57,7 +89,9 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
+    // 🔐 1. Validar token
     const authHeader = req.headers.authorization;
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -65,43 +99,62 @@ export default async function handler(req: any, res: any) {
     const idToken = authHeader.split('Bearer ')[1];
     const decodedToken = await auth.verifyIdToken(idToken);
     const uid = decodedToken.uid;
+    const email = decodedToken.email;
 
-    // 1. Remove partner links where this user is the owner
+    console.log('Deleting account for UID:', uid);
+
+    // 👥 2. Remover vínculo de parceiros
     const linkedUsersSnapshot = await db.collection('users').where('partnerId', '==', uid).get();
+
     if (!linkedUsersSnapshot.empty) {
-      const linkedBatch = db.batch();
+      let batch = db.batch();
+
       linkedUsersSnapshot.docs.forEach((doc) => {
-        linkedBatch.update(doc.ref, {
+        batch.update(doc.ref, {
           partnerId: FieldValue.delete(),
           partnerEmail: FieldValue.delete()
         });
       });
-      await linkedBatch.commit();
+
+      await batch.commit();
     }
 
-    // 2. Delete user data in collections
-    const collectionsToDelete = ['transactions', 'recurringTransactions', 'invites', 'categories'];
-    
-    for (const collectionName of collectionsToDelete) {
-      const snapshot = await db.collection(collectionName).where('ownerId', '==', uid).get();
-      if (!snapshot.empty) {
-        const batch = db.batch();
-        snapshot.docs.forEach((doc) => {
-          batch.delete(doc.ref);
-        });
-        await batch.commit();
-      }
+    // 🧹 3. Deletar dados COMPLETOS
+
+    // Transactions (duas possibilidades)
+    await deleteCollection('transactions', 'ownerId', uid);
+    await deleteCollection('transactions', 'creatorId', uid);
+
+    // Recorrentes
+    await deleteCollection('recurringTransactions', 'ownerId', uid);
+
+    // Categorias
+    await deleteCollection('categories', 'ownerId', uid);
+
+    // Convites (mais completo)
+    await deleteCollection('invites', 'ownerId', uid);
+    if (email) {
+      await deleteCollection('invites', 'email', email);
     }
 
-    // 3. Delete user document
+    // 🧹 4. Deletar usuário
     await db.collection('users').doc(uid).delete();
 
-    // 4. Delete user from Firebase Auth
+    // 🔥 5. Deletar Auth
     await auth.deleteUser(uid);
 
-    res.status(200).json({ success: true, message: 'Account deleted successfully' });
-  } catch (error) {
+    console.log('Account deleted successfully:', uid);
+
+    res.status(200).json({
+      success: true,
+      message: 'Account deleted successfully'
+    });
+
+  } catch (error: any) {
     console.error('Error deleting account:', error);
-    res.status(500).json({ error: 'Internal server error' });
+
+    res.status(500).json({
+      error: error.message || 'Internal server error'
+    });
   }
 }
