@@ -105,8 +105,7 @@ service cloud.firestore {
       allow read: if isOwner(userId) || hasPartner(userId);
       allow create: if isOwner(userId) && isValidUser(request.resource.data);
       allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
-                    request.resource.data.email == resource.data.email && 
-                    request.resource.data.createdAt == resource.data.createdAt;
+                    request.resource.data.email == resource.data.email;
     }
 
     match /transactions/{transactionId} {

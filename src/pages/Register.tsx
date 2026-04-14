@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { Wallet, Eye, EyeOff, CheckCircle2, XCircle } from 'lucide-react';
 
 export default function Register() {
@@ -41,13 +41,13 @@ export default function Register() {
       // Update Auth Profile
       await updateProfile(user, { displayName: name });
 
-      // Create user document explicitly to ensure name and onboarding status are set immediately
+      // Update user document explicitly to ensure name and onboarding status are set immediately
       await setDoc(doc(db, 'users', user.uid), {
         name,
         email,
         createdAt: new Date().toISOString(),
         onboardingCompleted: false,
-      });
+      }, { merge: true });
 
       navigate('/onboarding');
     } catch (err: any) {

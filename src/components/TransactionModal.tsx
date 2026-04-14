@@ -47,7 +47,7 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
 
     const fetchCategories = async () => {
       try {
-        const q = query(collection(db, 'categories'), where('userId', '==', ownerId));
+        const q = query(collection(db, 'categories'), where('ownerId', '==', ownerId));
         const snapshot = await getDocs(q);
         const customCats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
         setCategories([...defaultCategories, ...customCats]);
@@ -94,7 +94,7 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
       const docRef = await addDoc(collection(db, 'categories'), {
         name: newCategoryName.trim(),
         type,
-        userId: ownerId
+        ownerId: ownerId
       });
       setCategories([...categories, { id: docRef.id, name: newCategoryName.trim(), type }]);
       setCategory(newCategoryName.trim());

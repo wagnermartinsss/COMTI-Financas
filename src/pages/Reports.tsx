@@ -45,7 +45,7 @@ export default function Reports() {
 
     const fetchCategories = async () => {
       try {
-        const q = query(collection(db, 'categories'), where('userId', '==', ownerId));
+        const q = query(collection(db, 'categories'), where('ownerId', '==', ownerId));
         const snapshot = await getDocs(q);
         const customCats = snapshot.docs.map(doc => doc.data().name);
         
