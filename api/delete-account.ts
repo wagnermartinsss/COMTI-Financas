@@ -2,7 +2,7 @@ import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
-// 🔥 Inicialização correta do Firebase Admin (VERSÃO FINAL)
+// 🔥 Inicialização Firebase Admin (CORRETA)
 if (!getApps().length) {
   try {
     initializeApp({
@@ -17,10 +17,14 @@ if (!getApps().length) {
   }
 }
 
-const db = getFirestore();
+// 🔥 DATABASE FIXO (SEU CASO ESPECÍFICO)
+const db = getFirestore(
+  'ai-studio-3b8da906-d825-4974-b26d-4a1b1015dacc'
+);
+
 const auth = getAuth();
 
-// 🔥 Função robusta para deletar (suporta +500 docs)
+// 🔥 Função robusta (suporta +500 docs)
 async function deleteCollection(collectionName: string, field: string, value: string) {
   const snapshot = await db.collection(collectionName).where(field, '==', value).get();
 
@@ -46,18 +50,14 @@ async function deleteCollection(collectionName: string, field: string, value: st
 }
 
 export default async function handler(req: any, res: any) {
-  // 🔐 CORS (Vercel)
+  // 🔐 CORS
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
-  );
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
 
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+    return res.status(200).end();
   }
 
   if (req.method !== 'POST') {
@@ -65,7 +65,9 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    // 🔐 1. Validar token
+    console.log("🔥 DELETE ACCOUNT STARTED");
+
+    // 🔐 Validar token
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -78,10 +80,13 @@ export default async function handler(req: any, res: any) {
     const uid = decodedToken.uid;
     const email = decodedToken.email;
 
-    console.log('Deleting account for UID:', uid);
+    console.log("UID:", uid);
 
-    // 👥 2. Remover vínculo de parceiros
-    const linkedUsersSnapshot = await db.collection('users').where('partnerId', '==', uid).get();
+    // 👥 Remover vínculo de parceiros
+    const linkedUsersSnapshot = await db
+      .collection('users')
+      .where('partnerId', '==', uid)
+      .get();
 
     if (!linkedUsersSnapshot.empty) {
       let batch = db.batch();
@@ -96,31 +101,27 @@ export default async function handler(req: any, res: any) {
       await batch.commit();
     }
 
-    // 🧹 3. Deletar TODOS os dados relacionados
+    // 🧹 Deletar dados
 
-    // Transactions
     await deleteCollection('transactions', 'ownerId', uid);
     await deleteCollection('transactions', 'creatorId', uid);
 
-    // Recurring
     await deleteCollection('recurringTransactions', 'ownerId', uid);
 
-    // Categories
     await deleteCollection('categories', 'ownerId', uid);
 
-    // Invites
     await deleteCollection('invites', 'ownerId', uid);
     if (email) {
       await deleteCollection('invites', 'email', email);
     }
 
-    // 🧹 4. Deletar documento do usuário
+    // 🧹 Deletar documento do usuário
     await db.collection('users').doc(uid).delete();
 
-    // 🔥 5. Deletar Auth
+    // 🔥 Deletar Auth
     await auth.deleteUser(uid);
 
-    console.log('Account deleted successfully:', uid);
+    console.log("✅ Account deleted successfully:", uid);
 
     return res.status(200).json({
       success: true,
@@ -128,7 +129,7 @@ export default async function handler(req: any, res: any) {
     });
 
   } catch (error: any) {
-    console.error('Error deleting account:', error);
+    console.error('❌ Error deleting account:', error);
 
     return res.status(500).json({
       error: error.message || 'Internal server error',
