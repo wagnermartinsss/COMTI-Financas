@@ -1,12 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePeriod } from '../contexts/PeriodContext';
 import { db, handleFirestoreError, OperationType, auth } from '../lib/firebase';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { formatCurrency } from '../lib/utils';
 import { ArrowDownCircle, ArrowUpCircle, Wallet, RefreshCw, PieChart as PieChartIcon } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { processRecurringTransactions } from '../lib/recurring';
 import MonthSelector from '../components/MonthSelector';
 import TransactionModal from '../components/TransactionModal';
@@ -29,11 +27,10 @@ export default function Dashboard() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingRecurrences, setProcessingRecurrences] = useState(false);
-  
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | undefined>();
 
-  // 🔥 DETECTA MOBILE
   const isMobile = window.innerWidth < 768;
 
   useEffect(() => {
@@ -75,30 +72,39 @@ export default function Dashboard() {
     };
   }, [ownerId, startDateISO, endDateISO]);
 
-  const totalIncome = transactions
-    .filter(t => t.type === 'income' && !t.isPending)
-    .reduce((acc, curr) => acc + curr.amount, 0);
+  // ✅ MEMOIZAÇÃO
+  const totalIncome = useMemo(() =>
+    transactions
+      .filter(t => t.type === 'income' && !t.isPending)
+      .reduce((acc, curr) => acc + curr.amount, 0)
+  , [transactions]);
 
-  const totalExpense = transactions
-    .filter(t => t.type === 'expense' && !t.isPending)
-    .reduce((acc, curr) => acc + curr.amount, 0);
+  const totalExpense = useMemo(() =>
+    transactions
+      .filter(t => t.type === 'expense' && !t.isPending)
+      .reduce((acc, curr) => acc + curr.amount, 0)
+  , [transactions]);
 
   const balance = totalIncome - totalExpense;
 
-  const expensesByCategory = transactions
-    .filter(t => t.type === 'expense' && !t.isPending)
-    .reduce((acc, curr) => {
-      acc[curr.category] = (acc[curr.category] || 0) + curr.amount;
-      return acc;
-    }, {} as Record<string, number>);
+  const expensesByCategory = useMemo(() => {
+    return transactions
+      .filter(t => t.type === 'expense' && !t.isPending)
+      .reduce((acc, curr) => {
+        acc[curr.category] = (acc[curr.category] || 0) + curr.amount;
+        return acc;
+      }, {} as Record<string, number>);
+  }, [transactions]);
 
-  const pieData = Object.entries(expensesByCategory)
-    .map(([name, value]) => ({
-      name,
-      value: value as number,
-      percentage: totalExpense > 0 ? ((value as number) / totalExpense) * 100 : 0
-    }))
-    .sort((a, b) => b.value - a.value);
+  const pieData = useMemo(() => {
+    return Object.entries(expensesByCategory)
+      .map(([name, value]) => ({
+        name,
+        value: value as number,
+        percentage: totalExpense > 0 ? ((value as number) / totalExpense) * 100 : 0
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [expensesByCategory, totalExpense]);
 
   const COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#f43f5e', '#14b8a6', '#6366f1', '#a855f7'];
 
@@ -114,11 +120,6 @@ export default function Dashboard() {
       );
     }
     return null;
-  };
-
-  const handleTransactionClick = (transaction: Transaction) => {
-    setSelectedTransaction(transaction);
-    setIsModalOpen(true);
   };
 
   if (loading) {
@@ -138,41 +139,9 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center">
-              <Wallet className="w-6 h-6 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-500">Saldo Total</p>
-              <h3 className="text-2xl font-bold text-gray-900">{formatCurrency(balance)}</h3>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-12 h-12 bg-green-50 rounded-full flex items-center justify-center">
-              <ArrowUpCircle className="w-6 h-6 text-green-600" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-500">Receitas</p>
-              <h3 className="text-2xl font-bold text-gray-900">{formatCurrency(totalIncome)}</h3>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center">
-              <ArrowDownCircle className="w-6 h-6 text-red-600" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-500">Despesas</p>
-              <h3 className="text-2xl font-bold text-gray-900">{formatCurrency(totalExpense)}</h3>
-            </div>
-          </div>
-        </div>
+        <Card icon={<Wallet className="w-6 h-6 text-blue-600" />} label="Saldo Total" value={formatCurrency(balance)} />
+        <Card icon={<ArrowUpCircle className="w-6 h-6 text-green-600" />} label="Receitas" value={formatCurrency(totalIncome)} />
+        <Card icon={<ArrowDownCircle className="w-6 h-6 text-red-600" />} label="Despesas" value={formatCurrency(totalExpense)} />
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -181,7 +150,7 @@ export default function Dashboard() {
           {processingRecurrences && (
             <span className="text-sm text-gray-500 flex items-center gap-2">
               <RefreshCw className="w-4 h-4 animate-spin" />
-              Atualizando recorrências...
+              Atualizando...
             </span>
           )}
         </div>
@@ -195,14 +164,13 @@ export default function Dashboard() {
                     data={pieData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={isMobile ? 60 : 70}
-                    outerRadius={isMobile ? 110 : 110}
-                    paddingAngle={2}
+                    innerRadius={isMobile ? 50 : 70}
+                    outerRadius={isMobile ? 90 : 110}
                     dataKey="value"
-                    stroke="none"
+                    isAnimationActive={false}
                   >
                     {pieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      <Cell key={index} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
 
@@ -213,34 +181,50 @@ export default function Dashboard() {
                     verticalAlign={isMobile ? "bottom" : "middle"}
                     align={isMobile ? "center" : "right"}
                     iconType="circle"
-     formatter={(value, entry: any) => (
-  <span className="text-gray-700 text-sm">
-    {value} ({entry.payload.percentage.toFixed(1)}%)
-  </span>
-)}
+                    formatter={(value) => (
+                      <span className="text-gray-700 text-sm">{value}</span>
+                    )}
                   />
                 </PieChart>
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-gray-500">
-              <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
-                <PieChartIcon className="w-8 h-8 text-gray-400" />
-              </div>
-              <p>Nenhuma despesa registrada neste período.</p>
-            </div>
+            <EmptyState />
           )}
         </div>
       </div>
 
       <TransactionModal 
         isOpen={isModalOpen} 
-        onClose={() => {
-          setIsModalOpen(false);
-          setSelectedTransaction(undefined);
-        }} 
+        onClose={() => setIsModalOpen(false)} 
         transactionToEdit={selectedTransaction} 
       />
+    </div>
+  );
+}
+
+// COMPONENTES AUXILIARES (mantém layout limpo)
+function Card({ icon, label, value }: any) {
+  return (
+    <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+      <div className="flex items-center gap-4">
+        <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center">
+          {icon}
+        </div>
+        <div>
+          <p className="text-sm text-gray-500">{label}</p>
+          <h3 className="text-xl font-bold text-gray-900">{value}</h3>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+      <PieChartIcon className="w-8 h-8 mb-3" />
+      <p>Nenhuma despesa registrada.</p>
     </div>
   );
 }
