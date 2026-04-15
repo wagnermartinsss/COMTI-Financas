@@ -152,7 +152,9 @@ export default function ApplyRecurrencesModal({ isOpen, onClose, currentDate }: 
       
       selectedRecurrences.forEach(rec => {
         // Calculate the date for this month
-        const originalStartDate = new Date(rec.startDate.split('T')[0]);
+        // Manually parse the date string to avoid timezone shifts
+        const [year, month, day] = rec.startDate.split('T')[0].split('-').map(Number);
+        const originalStartDate = new Date(year, month - 1, day, 12, 0, 0);
         const originalDay = getDate(originalStartDate);
         const daysInCurrentMonth = getDaysInMonth(currentDate);
         
@@ -160,10 +162,10 @@ export default function ApplyRecurrencesModal({ isOpen, onClose, currentDate }: 
         const targetDay = Math.min(originalDay, daysInCurrentMonth);
         
         // Create a new date based on currentDate's year and month, but with targetDay
-        const targetDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), targetDay);
+        const targetDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), targetDay, 12, 0, 0);
         
-        // Adjust timezone to UTC midnight equivalent string
-        const dateStr = targetDate.toISOString().split('T')[0];
+        // Use format to get the date string in local time
+        const dateStr = format(targetDate, 'yyyy-MM-dd');
         
         const newTxRef = doc(collection(db, 'transactions'));
         batch.set(newTxRef, {
@@ -173,7 +175,7 @@ export default function ApplyRecurrencesModal({ isOpen, onClose, currentDate }: 
           amount: rec.isVariableAmount ? 0 : rec.amount,
           category: rec.category,
           description: rec.description,
-          date: new Date(dateStr).toISOString(),
+          date: `${dateStr}T12:00:00Z`,
           createdAt: new Date().toISOString(),
           recurringId: rec.id,
           isPending: rec.isVariableAmount ? true : false

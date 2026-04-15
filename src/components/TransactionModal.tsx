@@ -136,7 +136,25 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
           date: dateString,
           isPending: false, // If it was pending, saving it removes the pending status
         });
-        toast.success('Transação atualizada!');
+
+        if (isRecurring) {
+          await addDoc(collection(db, 'recurringTransactions'), {
+            ownerId,
+            creatorId: user.uid,
+            type,
+            amount: isVariableAmount ? 0 : numericAmount,
+            category,
+            description,
+            frequency,
+            startDate: dateString,
+            isVariableAmount,
+            createdAt: new Date().toISOString()
+          });
+          await processRecurringTransactions(ownerId);
+          toast.success('Transação atualizada e recorrência criada!');
+        } else {
+          toast.success('Transação atualizada!');
+        }
       } else {
         if (isRecurring) {
           await addDoc(collection(db, 'recurringTransactions'), {
@@ -307,21 +325,19 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
               />
             </div>
 
-            {!transactionToEdit && (
-              <div className="pt-2">
-                <label className="flex items-center gap-3 cursor-pointer p-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={isRecurring}
-                    onChange={(e) => setIsRecurring(e.target.checked)}
-                    className="w-5 h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                  />
-                  <span className="font-medium text-gray-700">Repetir esta transação</span>
-                </label>
-              </div>
-            )}
+            <div className="pt-2">
+              <label className="flex items-center gap-3 cursor-pointer p-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={isRecurring}
+                  onChange={(e) => setIsRecurring(e.target.checked)}
+                  className="w-5 h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                />
+                <span className="font-medium text-gray-700">Repetir esta transação</span>
+              </label>
+            </div>
 
-            {isRecurring && !transactionToEdit && (
+            {isRecurring && (
               <div className="pl-4 border-l-2 border-blue-200 ml-2 space-y-4">
                 <label className="flex items-center gap-3 cursor-pointer p-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
                   <input

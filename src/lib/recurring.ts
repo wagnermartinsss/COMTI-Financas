@@ -1,6 +1,6 @@
 import { collection, getDocs, query, where, writeBatch, doc } from 'firebase/firestore';
 import { db, auth } from './firebase';
-import { addWeeks, addMonths, addYears, endOfMonth } from 'date-fns';
+import { addWeeks, addMonths, addYears, endOfMonth, parseISO, format } from 'date-fns';
 
 export async function processRecurringTransactions(ownerId: string) {
   try {
@@ -28,18 +28,19 @@ export async function processRecurringTransactions(ownerId: string) {
     const batch = writeBatch(db);
     let hasNew = false;
     
-    const todayStr = new Date().toISOString().split('T')[0];
-    const todayDate = new Date(todayStr); // UTC midnight of today
-    const currentMonthEnd = endOfMonth(todayDate);
+    const today = new Date();
+    const currentMonthEnd = endOfMonth(today);
 
     recurringTxs.forEach(rec => {
-      const startDate = new Date(rec.startDate.split('T')[0]); // UTC midnight of start date
+      // Manually parse the date string to avoid timezone shifts
+      const [year, month, day] = rec.startDate.split('T')[0].split('-').map(Number);
+      const startDate = new Date(year, month - 1, day, 12, 0, 0);
       let currentDate = startDate;
       let iteration = 0;
 
       // Generate up to the end of the current month
       while (currentDate.getTime() <= currentMonthEnd.getTime()) {
-        const dateStr = currentDate.toISOString().split('T')[0];
+        const dateStr = format(currentDate, 'yyyy-MM-dd');
 
         // Check if transaction already exists for this recurringId and date
         const exists = existingTxs.some(tx => 
@@ -63,7 +64,7 @@ export async function processRecurringTransactions(ownerId: string) {
             amount: rec.isVariableAmount ? 0 : rec.amount,
             category: rec.category,
             description: rec.description,
-            date: new Date(dateStr).toISOString(),
+            date: `${dateStr}T12:00:00Z`,
             createdAt: new Date().toISOString(),
             recurringId: rec.id,
             isPending: rec.isVariableAmount ? true : false
