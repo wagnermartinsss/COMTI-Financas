@@ -1,6 +1,6 @@
 import { collection, getDocs, query, where, writeBatch, doc } from 'firebase/firestore';
 import { db, auth } from './firebase';
-import { addWeeks, addMonths, addYears, isAfter } from 'date-fns';
+import { addWeeks, addMonths, addYears, endOfMonth } from 'date-fns';
 
 export async function processRecurringTransactions(ownerId: string) {
   try {
@@ -30,12 +30,15 @@ export async function processRecurringTransactions(ownerId: string) {
     
     const todayStr = new Date().toISOString().split('T')[0];
     const todayDate = new Date(todayStr); // UTC midnight of today
+    const currentMonthEnd = endOfMonth(todayDate);
 
     recurringTxs.forEach(rec => {
-      let currentDate = new Date(rec.startDate.split('T')[0]); // UTC midnight of start date
+      const startDate = new Date(rec.startDate.split('T')[0]); // UTC midnight of start date
+      let currentDate = startDate;
+      let iteration = 0;
 
-      // While currentDate is <= todayDate
-      while (currentDate.getTime() <= todayDate.getTime()) {
+      // Generate up to the end of the current month
+      while (currentDate.getTime() <= currentMonthEnd.getTime()) {
         const dateStr = currentDate.toISOString().split('T')[0];
 
         // Check if transaction already exists for this recurringId and date
@@ -68,15 +71,15 @@ export async function processRecurringTransactions(ownerId: string) {
           hasNew = true;
         }
 
-        // Increment date based on frequency
+        // Increment date based on frequency from the ORIGINAL start date to prevent day shifting
+        iteration++;
         if (rec.frequency === 'weekly') {
-          currentDate = addWeeks(currentDate, 1);
-        } else if (rec.frequency === 'monthly') {
-          currentDate = addMonths(currentDate, 1);
+          currentDate = addWeeks(startDate, iteration);
         } else if (rec.frequency === 'yearly') {
-          currentDate = addYears(currentDate, 1);
+          currentDate = addYears(startDate, iteration);
         } else {
-          break; // Fallback to avoid infinite loop
+          // Default to monthly
+          currentDate = addMonths(startDate, iteration);
         }
       }
     });

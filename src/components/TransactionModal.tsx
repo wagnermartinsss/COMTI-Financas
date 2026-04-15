@@ -323,19 +323,6 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
 
             {isRecurring && !transactionToEdit && (
               <div className="pl-4 border-l-2 border-blue-200 ml-2 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Frequência</label>
-                  <select
-                    value={frequency}
-                    onChange={(e) => setFrequency(e.target.value as any)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all bg-gray-50"
-                  >
-                    <option value="weekly">Semanal</option>
-                    <option value="monthly">Mensal</option>
-                    <option value="yearly">Anual</option>
-                  </select>
-                </div>
-                
                 <label className="flex items-center gap-3 cursor-pointer p-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
                   <input
                     type="checkbox"
