@@ -35,6 +35,14 @@ export default function Transactions() {
   const [deleteFutureRecurrences, setDeleteFutureRecurrences] = useState(false);
   const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all');
 
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   useEffect(() => {
     if (!ownerId) return;
 
@@ -171,71 +179,122 @@ export default function Transactions() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="p-4 font-medium text-gray-500 text-sm">Descrição</th>
-                <th className="p-4 font-medium text-gray-500 text-sm">Categoria</th>
-                <th className="p-4 font-medium text-gray-500 text-sm">Data</th>
-                <th className="p-4 font-medium text-gray-500 text-sm text-right">Valor</th>
-                <th className="p-4 font-medium text-gray-500 text-sm text-center">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
+          {isMobile ? (
+            <div className="divide-y divide-gray-100">
               {filteredTransactions.map((transaction) => (
-                <tr 
+                <div 
                   key={transaction.id} 
                   onClick={() => handleTransactionClick(transaction)}
-                  className="hover:bg-gray-50 transition-colors cursor-pointer"
+                  className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
                 >
-                  <td className="p-4">
+                  <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                         transaction.type === 'income' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
                       }`}>
                         {transaction.type === 'income' ? <ArrowUpCircle className="w-4 h-4" /> : <ArrowDownCircle className="w-4 h-4" />}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-gray-900">{transaction.description}</span>
-                        {transaction.recurringId && (
-                          <RefreshCw className="w-3 h-3 text-blue-500" title="Transação Recorrente" />
-                        )}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-gray-900 truncate">{transaction.description}</span>
+                          {transaction.recurringId && (
+                            <RefreshCw className="w-3 h-3 text-blue-500 flex-shrink-0" title="Transação Recorrente" />
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500">{transaction.category}</p>
                       </div>
                     </div>
-                  </td>
-                  <td className="p-4 text-gray-600">{transaction.category}</td>
-                  <td className="p-4 text-gray-600">
-                    {format(new Date(transaction.date.split('T')[0] + 'T12:00:00'), "dd MMM yyyy", { locale: ptBR })}
-                  </td>
-                  <td className={`p-4 text-right font-medium ${
-                    transaction.isPending ? 'text-orange-500' : transaction.type === 'income' ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {transaction.isPending ? (
-                      <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider">A definir</span>
-                    ) : (
-                      <>{transaction.type === 'income' ? '+' : '-'} {formatCurrency(transaction.amount)}</>
-                    )}
-                  </td>
-                  <td className="p-4 text-center">
+                    <div className="text-right">
+                      <p className={`font-bold ${
+                        transaction.isPending ? 'text-orange-500' : transaction.type === 'income' ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {transaction.isPending ? (
+                          <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold uppercase">A definir</span>
+                        ) : (
+                          <>{transaction.type === 'income' ? '+' : '-'} {formatCurrency(transaction.amount)}</>
+                        )}
+                      </p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">
+                        {format(new Date(transaction.date.split('T')[0] + 'T12:00:00'), "dd/MM/yy", { locale: ptBR })}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
                     <button
                       onClick={(e) => handleDeleteClick(e, transaction)}
-                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Excluir"
+                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
-                  </td>
-                </tr>
+                  </div>
+                </div>
               ))}
-              {filteredTransactions.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="p-8 text-center text-gray-500">
-                    Nenhuma transação encontrada para este período.
-                  </td>
+            </div>
+          ) : (
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-100">
+                  <th className="p-4 font-medium text-gray-500 text-sm">Descrição</th>
+                  <th className="p-4 font-medium text-gray-500 text-sm">Categoria</th>
+                  <th className="p-4 font-medium text-gray-500 text-sm">Data</th>
+                  <th className="p-4 font-medium text-gray-500 text-sm text-right">Valor</th>
+                  <th className="p-4 font-medium text-gray-500 text-sm text-center">Ações</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredTransactions.map((transaction) => (
+                  <tr 
+                    key={transaction.id} 
+                    onClick={() => handleTransactionClick(transaction)}
+                    className="hover:bg-gray-50 transition-colors cursor-pointer"
+                  >
+                    <td className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                          transaction.type === 'income' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+                        }`}>
+                          {transaction.type === 'income' ? <ArrowUpCircle className="w-4 h-4" /> : <ArrowDownCircle className="w-4 h-4" />}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-gray-900">{transaction.description}</span>
+                          {transaction.recurringId && (
+                            <RefreshCw className="w-3 h-3 text-blue-500" title="Transação Recorrente" />
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-4 text-gray-600">{transaction.category}</td>
+                    <td className="p-4 text-gray-600">
+                      {format(new Date(transaction.date.split('T')[0] + 'T12:00:00'), "dd MMM yyyy", { locale: ptBR })}
+                    </td>
+                    <td className={`p-4 text-right font-medium ${
+                      transaction.isPending ? 'text-orange-500' : transaction.type === 'income' ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {transaction.isPending ? (
+                        <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider">A definir</span>
+                      ) : (
+                        <>{transaction.type === 'income' ? '+' : '-'} {formatCurrency(transaction.amount)}</>
+                      )}
+                    </td>
+                    <td className="p-4 text-center">
+                      <button
+                        onClick={(e) => handleDeleteClick(e, transaction)}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Excluir"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {filteredTransactions.length === 0 && (
+            <div className="p-8 text-center text-gray-500">
+              Nenhuma transação encontrada para este período.
+            </div>
+          )}
         </div>
       </div>
 

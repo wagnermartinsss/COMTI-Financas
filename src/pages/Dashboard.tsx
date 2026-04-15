@@ -31,7 +31,13 @@ export default function Dashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | undefined>();
 
-  const isMobile = window.innerWidth < 768;
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (!ownerId) return;
@@ -157,15 +163,15 @@ export default function Dashboard() {
 
         <div className="p-6">
           {pieData.length > 0 ? (
-            <div className="h-[360px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-[360px] w-full min-h-0 min-w-0">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                 <PieChart>
                   <Pie
                     data={pieData}
                     cx="50%"
-                    cy="50%"
-                    innerRadius={isMobile ? 50 : 70}
-                    outerRadius={isMobile ? 90 : 110}
+                    cy={isMobile ? "40%" : "50%"}
+                    innerRadius={isMobile ? 60 : 70}
+                    outerRadius={isMobile ? 80 : 110}
                     dataKey="value"
                     isAnimationActive={false}
                   >
@@ -176,12 +182,12 @@ export default function Dashboard() {
 
                   <Tooltip content={<CustomTooltip />} />
 
-                  {/* ✅ PORCENTAGEM CORRETA */}
                   <Legend
                     layout={isMobile ? "horizontal" : "vertical"}
                     verticalAlign={isMobile ? "bottom" : "middle"}
                     align={isMobile ? "center" : "right"}
                     iconType="circle"
+                    wrapperStyle={isMobile ? { paddingTop: '20px' } : undefined}
                     formatter={(value: string) => {
                       const item = pieData.find(p => p.name === value);
                       return (

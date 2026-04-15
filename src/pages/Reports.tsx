@@ -39,6 +39,14 @@ export default function Reports() {
   
   const chartRef = useRef<HTMLDivElement>(null);
   const pdfChartRef = useRef<HTMLDivElement>(null);
+  
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (!ownerId) return;
@@ -398,18 +406,19 @@ if (/Mobi|Android|iPhone/i.test(navigator.userAgent)) {
               </div>
               <div className="p-6" ref={chartRef}>
                 {pieData.length > 0 ? (
-                  <div className="h-[350px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
+                  <div className="h-[350px] w-full min-h-0 min-w-0">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                       <PieChart>
                         <Pie
                           data={pieData}
                           cx="50%"
-                          cy="45%"
-                          innerRadius={50}
-                          outerRadius={80}
+                          cy={isMobile ? "40%" : "45%"}
+                          innerRadius={isMobile ? 60 : 50}
+                          outerRadius={isMobile ? 80 : 80}
                           paddingAngle={2}
                           dataKey="value"
                           stroke="none"
+                          isAnimationActive={false}
                         >
                           {pieData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -417,8 +426,11 @@ if (/Mobi|Android|iPhone/i.test(navigator.userAgent)) {
                         </Pie>
                         <Tooltip content={<CustomTooltip />} />
                         <Legend 
-                          verticalAlign="bottom" 
+                          verticalAlign={isMobile ? "bottom" : "bottom"} 
+                          layout={isMobile ? "horizontal" : "horizontal"}
+                          align="center"
                           iconType="circle" 
+                          wrapperStyle={isMobile ? { paddingTop: '20px' } : undefined}
                           formatter={(value, entry: any) => {
                             const dataItem = pieData.find(d => d.name === value);
                             const percentage = dataItem ? dataItem.percentage : 0;
