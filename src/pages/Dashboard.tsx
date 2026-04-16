@@ -45,9 +45,15 @@ export default function Dashboard() {
     let unsubscribe: () => void;
 
     const init = async () => {
+      // Process recurrences in background to not block initial data fetch
+      processRecurringTransactions(ownerId)
+        .then(() => setProcessingRecurrences(false))
+        .catch(err => {
+          console.error("Recurrence error:", err);
+          setProcessingRecurrences(false);
+        });
+
       setProcessingRecurrences(true);
-      await processRecurringTransactions(ownerId);
-      setProcessingRecurrences(false);
 
       const q = query(
         collection(db, 'transactions'),
@@ -118,19 +124,15 @@ export default function Dashboard() {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="bg-white p-3 border border-gray-100 shadow-lg rounded-xl">
-          <p className="font-semibold text-gray-900 mb-1">{data.name}</p>
+        <div className="bg-white p-2 border border-gray-100 shadow-md rounded-lg text-xs">
+          <p className="font-semibold text-gray-900 mb-0.5">{data.name}</p>
           <p className="text-red-600 font-medium">{formatCurrency(data.value)}</p>
-          <p className="text-sm text-gray-500">{data.percentage.toFixed(1)}%</p>
+          <p className="text-gray-500">{data.percentage.toFixed(1)}%</p>
         </div>
       );
     }
     return null;
   };
-
-  if (loading) {
-    return <div className="flex items-center justify-center h-64">Carregando...</div>;
-  }
 
   return (
     <div className="space-y-6">
@@ -144,67 +146,80 @@ export default function Dashboard() {
         <MonthSelector />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card icon={<Wallet className="w-6 h-6 text-blue-600" />} label="Saldo Total" value={formatCurrency(balance)} />
-        <Card icon={<ArrowUpCircle className="w-6 h-6 text-green-600" />} label="Receitas" value={formatCurrency(totalIncome)} />
-        <Card icon={<ArrowDownCircle className="w-6 h-6 text-red-600" />} label="Despesas" value={formatCurrency(totalExpense)} />
-      </div>
-
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Despesas por Categoria</h2>
-          {processingRecurrences && (
-            <span className="text-sm text-gray-500 flex items-center gap-2">
-              <RefreshCw className="w-4 h-4 animate-spin" />
-              Atualizando...
-            </span>
-          )}
+      {loading ? (
+        <div className="space-y-6 animate-pulse">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-24 bg-gray-200 rounded-2xl"></div>
+            ))}
+          </div>
+          <div className="h-[400px] bg-gray-200 rounded-2xl"></div>
         </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card icon={<Wallet className="w-6 h-6 text-blue-600" />} label="Saldo Total" value={formatCurrency(balance)} />
+            <Card icon={<ArrowUpCircle className="w-6 h-6 text-green-600" />} label="Receitas" value={formatCurrency(totalIncome)} />
+            <Card icon={<ArrowDownCircle className="w-6 h-6 text-red-600" />} label="Despesas" value={formatCurrency(totalExpense)} />
+          </div>
 
-        <div className="p-6">
-          {pieData.length > 0 ? (
-            <div className="h-[360px] w-full min-h-0 min-w-0">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy={isMobile ? "40%" : "50%"}
-                    innerRadius={isMobile ? 60 : 70}
-                    outerRadius={isMobile ? 80 : 110}
-                    dataKey="value"
-                    isAnimationActive={false}
-                  >
-                    {pieData.map((entry, index) => (
-                      <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-
-                  <Tooltip content={<CustomTooltip />} />
-
-                  <Legend
-                    layout={isMobile ? "horizontal" : "vertical"}
-                    verticalAlign={isMobile ? "bottom" : "middle"}
-                    align={isMobile ? "center" : "right"}
-                    iconType="circle"
-                    wrapperStyle={isMobile ? { paddingTop: '20px' } : undefined}
-                    formatter={(value: string) => {
-                      const item = pieData.find(p => p.name === value);
-                      return (
-                        <span className="text-gray-700 text-sm">
-                          {value} ({item?.percentage.toFixed(1)}%)
-                        </span>
-                      );
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Despesas por Categoria</h2>
+              {processingRecurrences && (
+                <span className="text-sm text-gray-500 flex items-center gap-2">
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Atualizando...
+                </span>
+              )}
             </div>
-          ) : (
-            <EmptyState />
-          )}
-        </div>
-      </div>
+
+            <div className="p-6">
+              {pieData.length > 0 ? (
+                <div className="h-[360px] w-full min-h-0 min-w-0">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        cx="50%"
+                        cy={isMobile ? "40%" : "50%"}
+                        innerRadius={isMobile ? 60 : 70}
+                        outerRadius={isMobile ? 80 : 110}
+                        dataKey="value"
+                        isAnimationActive={false}
+                      >
+                        {pieData.map((entry, index) => (
+                          <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+
+                      <Tooltip content={<CustomTooltip />} />
+
+                      <Legend
+                        layout={isMobile ? "horizontal" : "vertical"}
+                        verticalAlign={isMobile ? "bottom" : "middle"}
+                        align={isMobile ? "center" : "right"}
+                        iconType="circle"
+                        wrapperStyle={isMobile ? { paddingTop: '20px' } : undefined}
+                        formatter={(value: string) => {
+                          const item = pieData.find(p => p.name === value);
+                          return (
+                            <span className="text-gray-700 text-sm">
+                              {value} ({item?.percentage.toFixed(1)}%)
+                            </span>
+                          );
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <EmptyState />
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       <TransactionModal 
         isOpen={isModalOpen} 

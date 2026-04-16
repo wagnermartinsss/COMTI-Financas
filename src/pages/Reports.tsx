@@ -151,10 +151,10 @@ export default function Reports() {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-100">
-          <p className="font-semibold text-gray-900 mb-1">{data.name}</p>
+        <div className="bg-white p-2 border border-gray-100 shadow-md rounded-lg text-xs">
+          <p className="font-semibold text-gray-900 mb-0.5">{data.name}</p>
           <p className="text-red-600 font-medium">{formatCurrency(data.value)}</p>
-          <p className="text-gray-500 text-sm">{data.percentage.toFixed(1)}% do total</p>
+          <p className="text-gray-500">{data.percentage.toFixed(1)}%</p>
         </div>
       );
     }
