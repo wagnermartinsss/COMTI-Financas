@@ -4,13 +4,15 @@ import { usePeriod } from '../contexts/PeriodContext';
 import { db, handleFirestoreError, OperationType, auth } from '../lib/firebase';
 import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, addDoc } from 'firebase/firestore';
 import { formatCurrency } from '../lib/utils';
-import { Plus, Trash2, ArrowUpCircle, ArrowDownCircle, RefreshCw, CalendarPlus } from 'lucide-react';
+import { Plus, Trash2, ArrowUpCircle, ArrowDownCircle, RefreshCw, CalendarPlus, Lightbulb, Sparkles, ChevronDown, ChevronUp, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import MonthSelector from '../components/MonthSelector';
 import TransactionModal from '../components/TransactionModal';
 import ApplyRecurrencesModal from '../components/ApplyRecurrencesModal';
 import toast from 'react-hot-toast';
+import { getFinancialInsights, AIInsights } from '../services/aiService';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface Transaction {
   id: string;
@@ -36,6 +38,9 @@ export default function Transactions() {
   const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all');
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiInsights, setAiInsights] = useState<AIInsights | null>(null);
+  const [showInsights, setShowInsights] = useState(false);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -118,6 +123,26 @@ export default function Transactions() {
     setIsModalOpen(true);
   };
 
+  const handleGetInsights = async () => {
+    if (filteredTransactions.length === 0) {
+      toast.error('Nenhuma transação para analisar neste mês.');
+      return;
+    }
+
+    setIsAnalyzing(true);
+    try {
+      const insights = await getFinancialInsights(filteredTransactions);
+      setAiInsights(insights);
+      setShowInsights(true);
+      toast.success('Análise concluída!');
+    } catch (error) {
+      console.error('Erro ao obter insights:', error);
+      toast.error('Erro ao processar análise inteligente.');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   const filteredTransactions = transactions.filter(t => typeFilter === 'all' || t.type === typeFilter);
 
   if (loading) {
@@ -130,6 +155,18 @@ export default function Transactions() {
         <h1 className="text-2xl font-bold text-gray-900">Transações</h1>
         <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
           <MonthSelector />
+          <button
+            onClick={handleGetInsights}
+            disabled={isAnalyzing}
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl hover:bg-amber-100 transition-colors font-medium shadow-sm disabled:opacity-50"
+          >
+            {isAnalyzing ? (
+              <RefreshCw className="w-5 h-5 animate-spin" />
+            ) : (
+              <Lightbulb className="w-5 h-5" />
+            )}
+            {isAnalyzing ? 'Analisando...' : 'Onde posso economizar?'}
+          </button>
           <button
             onClick={() => setIsRecurrenceModalOpen(true)}
             className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium shadow-sm"
@@ -297,6 +334,90 @@ export default function Transactions() {
           )}
         </div>
       </div>
+
+      <AnimatePresence>
+        {aiInsights && showInsights && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-6 border border-amber-100 shadow-sm space-y-6"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+                  <Sparkles className="w-6 h-6 text-amber-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-amber-900">Análise Inteligente</h2>
+                  <p className="text-xs text-amber-700">Baseado nas transações de {format(currentDate, "MMMM yyyy", { locale: ptBR })}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowInsights(false)}
+                className="text-amber-400 hover:text-amber-600 transition-colors"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-white/40">
+                <p className="text-xs text-amber-700 font-medium uppercase tracking-wider mb-1">Total Gasto</p>
+                <p className="text-xl font-bold text-amber-900">{formatCurrency(aiInsights.resumo.totalGasto)}</p>
+              </div>
+              <div className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-white/40">
+                <p className="text-xs text-amber-700 font-medium uppercase tracking-wider mb-1">Maior Categoria</p>
+                <p className="text-xl font-bold text-amber-900">{aiInsights.resumo.categoriaPrincipal}</p>
+              </div>
+              <div className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-white/40">
+                <p className="text-xs text-amber-700 font-medium uppercase tracking-wider mb-1">Peso no Orçamento</p>
+                <p className="text-xl font-bold text-amber-900">{aiInsights.resumo.percentualPrincipal.toFixed(1)}%</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-amber-900 leading-relaxed italic">"{aiInsights.mensagemIA}"</p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <h3 className="flex items-center gap-2 font-bold text-amber-900 text-sm">
+                    <Lightbulb className="w-4 h-4" /> Insights e Alertas
+                  </h3>
+                  <ul className="space-y-2">
+                    {aiInsights.alertas.map((alerta, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-amber-800">
+                        <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
+                        {alerta}
+                      </li>
+                    ))}
+                    {aiInsights.insights.map((insight, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-amber-800">
+                        <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                        {insight}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="flex items-center gap-2 font-bold text-amber-900 text-sm">
+                    <ArrowDownCircle className="w-4 h-4" /> Oportunidades de Economia
+                  </h3>
+                  <div className="space-y-2">
+                    {aiInsights.oportunidades.map((op, i) => (
+                      <div key={i} className="bg-white/40 p-3 rounded-lg border border-white/20 flex justify-between items-center">
+                        <span className="text-sm text-amber-900">{op.descricao}</span>
+                        <span className="text-sm font-bold text-green-700">-{formatCurrency(op.economiaEstimada)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <TransactionModal 
         isOpen={isModalOpen} 
