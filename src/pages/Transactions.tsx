@@ -4,15 +4,14 @@ import { usePeriod } from '../contexts/PeriodContext';
 import { db, handleFirestoreError, OperationType, auth } from '../lib/firebase';
 import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, addDoc } from 'firebase/firestore';
 import { formatCurrency } from '../lib/utils';
-import { Plus, Trash2, ArrowUpCircle, ArrowDownCircle, RefreshCw, CalendarPlus, Lightbulb, Sparkles, ChevronDown, ChevronUp, XCircle } from 'lucide-react';
+import { Plus, Trash2, ArrowUpCircle, ArrowDownCircle, RefreshCw, CalendarPlus, Upload, CreditCard, User } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import MonthSelector from '../components/MonthSelector';
 import TransactionModal from '../components/TransactionModal';
 import ApplyRecurrencesModal from '../components/ApplyRecurrencesModal';
+import ImportCSVModal from '../components/ImportCSVModal';
 import toast from 'react-hot-toast';
-import { getFinancialInsights, AIInsights } from '../services/aiService';
-import { motion, AnimatePresence } from 'framer-motion';
 
 interface Transaction {
   id: string;
@@ -22,6 +21,12 @@ interface Transaction {
   description: string;
   date: string;
   recurringId?: string;
+  isPending?: boolean;
+  source?: string;
+  responsible?: string;
+  isInstallment?: boolean;
+  installmentNumber?: number;
+  totalInstallments?: number;
 }
 
 export default function Transactions() {
@@ -32,15 +37,13 @@ export default function Transactions() {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isRecurrenceModalOpen, setIsRecurrenceModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | undefined>();
   const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
   const [deleteFutureRecurrences, setDeleteFutureRecurrences] = useState(false);
   const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all');
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [aiInsights, setAiInsights] = useState<AIInsights | null>(null);
-  const [showInsights, setShowInsights] = useState(false);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -123,26 +126,6 @@ export default function Transactions() {
     setIsModalOpen(true);
   };
 
-  const handleGetInsights = async () => {
-    if (filteredTransactions.length === 0) {
-      toast.error('Nenhuma transação para analisar neste mês.');
-      return;
-    }
-
-    setIsAnalyzing(true);
-    try {
-      const insights = await getFinancialInsights(filteredTransactions);
-      setAiInsights(insights);
-      setShowInsights(true);
-      toast.success('Análise concluída!');
-    } catch (error) {
-      console.error('Erro ao obter insights:', error);
-      toast.error('Erro ao processar análise inteligente.');
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
   const filteredTransactions = transactions.filter(t => typeFilter === 'all' || t.type === typeFilter);
 
   if (loading) {
@@ -156,16 +139,11 @@ export default function Transactions() {
         <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
           <MonthSelector />
           <button
-            onClick={handleGetInsights}
-            disabled={isAnalyzing}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl hover:bg-amber-100 transition-colors font-medium shadow-sm disabled:opacity-50"
+            onClick={() => setIsImportModalOpen(true)}
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium shadow-sm"
           >
-            {isAnalyzing ? (
-              <RefreshCw className="w-5 h-5 animate-spin" />
-            ) : (
-              <Lightbulb className="w-5 h-5" />
-            )}
-            {isAnalyzing ? 'Analisando...' : 'Onde posso economizar?'}
+            <Upload className="w-5 h-5 text-blue-600" />
+            Importar Fatura (CSV)
           </button>
           <button
             onClick={() => setIsRecurrenceModalOpen(true)}
@@ -237,8 +215,24 @@ export default function Transactions() {
                           {transaction.recurringId && (
                             <RefreshCw className="w-3 h-3 text-blue-500 flex-shrink-0" title="Transação Recorrente" />
                           )}
+                          {transaction.source === 'credit_card' && (
+                            <CreditCard className="w-3 h-3 text-purple-500 flex-shrink-0" title="Cartão de Crédito" />
+                          )}
+                          {transaction.isInstallment && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 uppercase tracking-wider flex-shrink-0">
+                              {transaction.installmentNumber}/{transaction.totalInstallments}
+                            </span>
+                          )}
                         </div>
-                        <p className="text-xs text-gray-500">{transaction.category}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <p className="text-xs text-gray-500">{transaction.category}</p>
+                          {transaction.responsible && (
+                            <span className="flex items-center gap-1 text-[10px] font-medium text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                              <User className="w-3 h-3" />
+                              {transaction.responsible}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="text-right">
@@ -297,10 +291,28 @@ export default function Transactions() {
                           {transaction.recurringId && (
                             <RefreshCw className="w-3 h-3 text-blue-500" title="Transação Recorrente" />
                           )}
+                          {transaction.source === 'credit_card' && (
+                            <CreditCard className="w-3 h-3 text-purple-500" title="Cartão de Crédito" />
+                          )}
+                          {transaction.isInstallment && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 uppercase tracking-wider">
+                              {transaction.installmentNumber}/{transaction.totalInstallments}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </td>
-                    <td className="p-4 text-gray-600">{transaction.category}</td>
+                    <td className="p-4">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-gray-600">{transaction.category}</span>
+                        {transaction.responsible && (
+                          <span className="flex items-center gap-1 text-[10px] font-medium text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded w-fit">
+                            <User className="w-3 h-3" />
+                            {transaction.responsible}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="p-4 text-gray-600">
                       {format(new Date(transaction.date.split('T')[0] + 'T12:00:00'), "dd MMM yyyy", { locale: ptBR })}
                     </td>
@@ -335,102 +347,6 @@ export default function Transactions() {
         </div>
       </div>
 
-      <AnimatePresence>
-        {aiInsights && showInsights && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-6 border border-amber-100 shadow-sm space-y-6"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
-                  <Sparkles className="w-6 h-6 text-amber-600" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-amber-900">Análise Inteligente</h2>
-                  <p className="text-xs text-amber-700">Baseado nas transações de {format(currentDate, "MMMM yyyy", { locale: ptBR })}</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setShowInsights(false)}
-                className="text-amber-400 hover:text-amber-600 transition-colors"
-              >
-                <XCircle className="w-6 h-6" />
-              </button>
-            </div>
-
-            <div className="bg-amber-100/50 p-4 rounded-xl border border-amber-200/50">
-              <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-1 flex items-center gap-2">
-                <Lightbulb className="w-3 h-3" /> Principal Ponto de Atenção
-              </h3>
-              <p className="text-amber-900 font-medium">{aiInsights.pontoAtencao}</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-white/40">
-                <p className="text-xs text-amber-700 font-medium uppercase tracking-wider mb-1">Total Gasto</p>
-                <p className="text-xl font-bold text-amber-900">{formatCurrency(aiInsights.resumo.totalGasto)}</p>
-              </div>
-              <div className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-white/40">
-                <p className="text-xs text-amber-700 font-medium uppercase tracking-wider mb-1">Maior Categoria</p>
-                <p className="text-xl font-bold text-amber-900">{aiInsights.resumo.categoriaPrincipal}</p>
-              </div>
-              <div className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-white/40">
-                <p className="text-xs text-amber-700 font-medium uppercase tracking-wider mb-1">Peso no Orçamento</p>
-                <p className="text-xl font-bold text-amber-900">{aiInsights.resumo.percentualPrincipal.toFixed(1)}%</p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="bg-white/40 p-4 rounded-xl border border-white/20">
-                <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-2 flex items-center gap-2">
-                  💬 Resumo do Mês
-                </h3>
-                <p className="text-amber-900 leading-relaxed italic">"{aiInsights.mensagemIA}"</p>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-3">
-                  <h3 className="flex items-center gap-2 font-bold text-amber-900 text-sm">
-                    ⚠️ Insights e Alertas
-                  </h3>
-                  <ul className="space-y-2">
-                    {aiInsights.insights.map((insight, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-amber-800">
-                        <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
-                        {insight}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="space-y-3">
-                  <h3 className="flex items-center gap-2 font-bold text-amber-900 text-sm">
-                    💰 Oportunidades de Economia
-                  </h3>
-                  <div className="space-y-2">
-                    {aiInsights.oportunidades.map((op, i) => (
-                      <div key={i} className="bg-white/40 p-3 rounded-lg border border-white/20 flex justify-between items-center">
-                        <span className="text-sm text-amber-900">{op.descricao}</span>
-                        <span className="text-sm font-bold text-green-700">-{formatCurrency(op.economiaEstimada)}</span>
-                      </div>
-                    ))}
-                    {aiInsights.totalEconomiaEstimada > 0 && (
-                      <div className="bg-green-100/50 p-3 rounded-lg border border-green-200/50 flex justify-between items-center mt-4">
-                        <span className="text-sm font-bold text-green-800">Economia Total Estimada</span>
-                        <span className="text-lg font-bold text-green-700">{formatCurrency(aiInsights.totalEconomiaEstimada)}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       <TransactionModal 
         isOpen={isModalOpen} 
         onClose={() => {
@@ -444,6 +360,12 @@ export default function Transactions() {
         isOpen={isRecurrenceModalOpen}
         onClose={() => setIsRecurrenceModalOpen(false)}
         currentDate={currentDate}
+      />
+
+      <ImportCSVModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onSuccess={() => setIsImportModalOpen(false)}
       />
 
       {transactionToDelete && (

@@ -21,6 +21,8 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [responsible, setResponsible] = useState('');
+  const [source, setSource] = useState('manual');
   const [isRecurring, setIsRecurring] = useState(false);
   const [frequency, setFrequency] = useState<'weekly' | 'monthly' | 'yearly'>('monthly');
   const [isVariableAmount, setIsVariableAmount] = useState(false);
@@ -65,6 +67,8 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
       setCategory(transactionToEdit.category);
       setDescription(transactionToEdit.description);
       setDate(transactionToEdit.date.split('T')[0]);
+      setResponsible(transactionToEdit.responsible || '');
+      setSource(transactionToEdit.source || 'manual');
       setIsRecurring(false); // Can't edit recurrence from a single transaction instance easily here
       setIsVariableAmount(false);
     } else {
@@ -73,6 +77,8 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
       setCategory('');
       setDescription('');
       setDate(new Date().toISOString().split('T')[0]);
+      setResponsible('');
+      setSource('manual');
       setIsRecurring(false);
       setFrequency('monthly');
       setIsVariableAmount(false);
@@ -128,14 +134,19 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
       const dateString = `${date}T12:00:00Z`;
 
       if (transactionToEdit) {
-        await updateDoc(doc(db, 'transactions', transactionToEdit.id), {
+        const updateData: any = {
           type,
           amount: numericAmount,
           category,
           description,
           date: dateString,
+          source,
           isPending: false, // If it was pending, saving it removes the pending status
-        });
+        };
+        if (responsible) updateData.responsible = responsible;
+        else updateData.responsible = null;
+
+        await updateDoc(doc(db, 'transactions', transactionToEdit.id), updateData);
 
         if (isRecurring) {
           await addDoc(collection(db, 'recurringTransactions'), {
@@ -172,7 +183,7 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
           await processRecurringTransactions(ownerId);
           toast.success('Transação recorrente criada!');
         } else {
-          await addDoc(collection(db, 'transactions'), {
+          const txData: any = {
             ownerId,
             creatorId: user.uid,
             type,
@@ -180,9 +191,13 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
             category,
             description,
             date: dateString,
+            source,
             isPending: false,
             createdAt: new Date().toISOString()
-          });
+          };
+          if (responsible) txData.responsible = responsible;
+
+          await addDoc(collection(db, 'transactions'), txData);
           toast.success('Transação criada!');
         }
       }
@@ -323,6 +338,31 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
                 onChange={(e) => setDate(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all bg-gray-50"
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Responsável (Opcional)</label>
+                <input
+                  type="text"
+                  value={responsible}
+                  onChange={(e) => setResponsible(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all bg-gray-50"
+                  placeholder="Ex: João"
+                  maxLength={50}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Origem</label>
+                <select
+                  value={source}
+                  onChange={(e) => setSource(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all bg-gray-50 appearance-none"
+                >
+                  <option value="manual">Manual</option>
+                  <option value="credit_card">Cartão de Crédito</option>
+                </select>
+              </div>
             </div>
 
             <div className="pt-2">
