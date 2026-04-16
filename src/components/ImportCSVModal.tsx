@@ -30,7 +30,17 @@ interface ParsedTransaction {
   source: 'credit_card';
   isValid: boolean;
   selected: boolean;
+  hash: string;
+  isDuplicate: boolean;
 }
+
+const generateHash = (description: string, amount: number, date: string, responsible?: string) => {
+  const normDesc = (description || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const normAmount = Number(amount || 0).toFixed(2);
+  const normDate = (date || '').split('T')[0] || '';
+  const normResp = (responsible || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return btoa(encodeURIComponent(`${normDesc}|${normAmount}|${normDate}|${normResp}`));
+};
 
 const AmountInput = ({ amount, onChange }: { amount: number, onChange: (val: number) => void }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -121,6 +131,7 @@ export default function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSV
   const [isSaving, setIsSaving] = useState(false);
   const [addingCategoryForTxId, setAddingCategoryForTxId] = useState<string | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [showOnlyNew, setShowOnlyNew] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const defaultCategories = [
@@ -153,7 +164,13 @@ export default function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSV
       try {
         const q = query(collection(db, 'transactions'), where('ownerId', '==', ownerId));
         const snapshot = await getDocs(q);
-        const txs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        const txs = snapshot.docs.map(doc => {
+          const data = doc.data() as any;
+          if (!data.hash) {
+            data.hash = generateHash(data.description, data.amount, data.date, data.responsible);
+          }
+          return { id: doc.id, ...data };
+        });
         setExistingTransactions(txs);
       } catch (error) {
         console.error("Error fetching existing transactions", error);
@@ -216,14 +233,8 @@ export default function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSV
     return { isInstallment: false };
   };
 
-  const checkDuplicate = (parsedTx: ParsedTransaction, existingTxs: any[]) => {
-    const txDate = parsedTx.date.split('T')[0];
-    return existingTxs.some(existing => {
-      const existingDate = existing.date.split('T')[0];
-      return existingDate === txDate && 
-             existing.amount === parsedTx.amount && 
-             existing.description.toLowerCase() === parsedTx.description.toLowerCase();
-    });
+  const checkDuplicate = (hash: string, existingTxs: any[]) => {
+    return existingTxs.some(existing => existing.hash === hash);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -290,6 +301,8 @@ export default function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSV
               const amount = Math.abs(rawAmount);
               const type = rawAmount < 0 ? 'income' : 'expense';
               const installmentInfo = parseInstallments(description, installmentStr);
+              const hash = generateHash(description, amount, isoDate, responsible);
+              const isDuplicate = checkDuplicate(hash, existingTransactions);
               
               const newTx: ParsedTransaction = {
                 id: `import-${index}`,
@@ -301,15 +314,11 @@ export default function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSV
                 type,
                 source: 'credit_card',
                 isValid: true,
-                selected: true,
+                selected: !isDuplicate,
+                hash,
+                isDuplicate,
                 ...installmentInfo
               };
-
-              const isDuplicate = checkDuplicate(newTx, existingTransactions);
-              if (isDuplicate) {
-                newTx.selected = false;
-                newTx.description = `[DUPLICADA] ${newTx.description}`;
-              }
 
               parsedData.push(newTx);
             }
@@ -343,20 +352,36 @@ export default function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSV
         );
       }
 
-      return prev.map(t => t.id === id ? { ...t, [field]: value } : t);
+      return prev.map(t => {
+        if (t.id !== id) return t;
+        const updatedTx = { ...t, [field]: value };
+        if (['description', 'amount', 'date', 'responsible'].includes(field)) {
+          updatedTx.hash = generateHash(updatedTx.description, updatedTx.amount, updatedTx.date, updatedTx.responsible);
+          updatedTx.isDuplicate = checkDuplicate(updatedTx.hash, existingTransactions);
+          // Auto deselect if it becomes duplicate
+          if (updatedTx.isDuplicate && !t.isDuplicate) updatedTx.selected = false;
+        }
+        return updatedTx;
+      });
     });
   };
 
   const handleAddCategory = async (txId: string) => {
     if (!newCategoryName.trim() || !ownerId) return;
+    
+    // Auto-detect type from related transaction
+    const currentTx = transactions.find(t => t.id === txId);
+    const catType = currentTx ? currentTx.type : 'expense';
+
     try {
       const docRef = await addDoc(collection(db, 'categories'), {
         name: newCategoryName.trim(),
-        type: 'expense',
+        type: catType,
         ownerId: ownerId
       });
-      const newCat = { id: docRef.id, name: newCategoryName.trim(), type: 'expense' };
-      setCategories([...categories, newCat]);
+      const newCat = { id: docRef.id, name: newCategoryName.trim(), type: catType };
+      
+      setCategories(prev => [...prev, newCat]);
       handleTransactionChange(txId, 'category', newCat.name);
       setAddingCategoryForTxId(null);
       setNewCategoryName('');
@@ -372,9 +397,11 @@ export default function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSV
     setIsSaving(true);
 
     const selectedTransactions = transactions.filter(t => t.selected && t.isValid);
+    const importBatchId = `csv_${new Date().getTime()}`;
     
     try {
       for (const t of selectedTransactions) {
+        const finalHash = generateHash(t.description, t.amount, t.date, t.responsible);
         const txData: any = {
           ownerId,
           creatorId: user.uid,
@@ -384,6 +411,8 @@ export default function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSV
           description: t.description,
           date: t.date,
           source: t.source,
+          hash: finalHash,
+          importBatchId,
           createdAt: new Date().toISOString()
         };
 
@@ -392,7 +421,9 @@ export default function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSV
           txData.isInstallment = true;
           txData.installmentNumber = t.installmentNumber;
           txData.totalInstallments = t.totalInstallments;
-          txData.installmentId = t.installmentId;
+          if (t.installmentId) {
+            txData.installmentId = t.installmentId;
+          }
         }
 
         await addDoc(collection(db, 'transactions'), txData);
@@ -446,16 +477,36 @@ export default function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSV
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="flex justify-between items-center mb-4">
-                <p className="text-gray-600">
-                  <strong className="text-gray-900">{transactions.length}</strong> transações encontradas. Revise antes de importar.
-                </p>
-                <button
-                  onClick={() => setTransactions(prev => prev.map(t => ({ ...t, selected: !transactions.every(tx => tx.selected) })))}
-                  className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-                >
-                  {transactions.every(tx => tx.selected) ? 'Desmarcar todas' : 'Selecionar todas'}
-                </button>
+              <div className="flex flex-col gap-4 mb-4">
+                <div className="flex justify-between items-center">
+                  <p className="text-gray-600">
+                    <strong className="text-gray-900">{transactions.length}</strong> transações encontradas. Revise antes de importar.
+                  </p>
+                  <button
+                    onClick={() => setTransactions(prev => prev.map(t => ({ ...t, selected: !transactions.every(tx => tx.selected) })))}
+                    className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    {transactions.every(tx => tx.selected) ? 'Desmarcar todas' : 'Selecionar todas'}
+                  </button>
+                </div>
+                
+                {transactions.some(t => t.isDuplicate) && (
+                  <div className="flex items-center justify-between bg-orange-50 border border-orange-100 p-3 rounded-lg">
+                    <div className="flex items-center gap-2 text-orange-800 text-sm">
+                      <AlertCircle className="w-5 h-5 text-orange-500" />
+                      <span><strong>{transactions.filter(t => t.isDuplicate).length} transações</strong> já foram importadas anteriormente.</span>
+                    </div>
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={showOnlyNew}
+                        onChange={(e) => setShowOnlyNew(e.target.checked)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      Mostrar apenas novas
+                    </label>
+                  </div>
+                )}
               </div>
 
               <div className="border border-gray-200 rounded-xl overflow-hidden">
@@ -471,8 +522,10 @@ export default function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSV
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {transactions.map((t) => (
-                      <tr key={t.id} className={t.selected ? 'bg-white' : 'bg-gray-50 opacity-60'}>
+                    {transactions.filter(t => showOnlyNew ? !t.isDuplicate : true).map((t) => (
+                      <tr key={t.id} className={
+                        t.selected ? (t.isDuplicate ? 'bg-orange-50' : 'bg-white') : 'bg-gray-50 opacity-60'
+                      }>
                         <td className="p-3 text-center">
                           <input
                             type="checkbox"
@@ -489,12 +542,19 @@ export default function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSV
                           />
                         </td>
                         <td className="p-3">
-                          <input
-                            type="text"
-                            value={t.description}
-                            onChange={(e) => handleTransactionChange(t.id, 'description', e.target.value)}
-                            className="w-full bg-transparent border-none p-0 focus:ring-0 text-gray-900 font-medium"
-                          />
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={t.description}
+                              onChange={(e) => handleTransactionChange(t.id, 'description', e.target.value)}
+                              className="w-full bg-transparent border-none p-0 focus:ring-0 text-gray-900 font-medium"
+                            />
+                            {t.isDuplicate && (
+                              <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 uppercase" title="Já importada">
+                                Já importada
+                              </span>
+                            )}
+                          </div>
                           {t.isInstallment && (
                             <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 uppercase tracking-wider">
                               Parcela {t.installmentNumber}/{t.totalInstallments}
@@ -582,7 +642,7 @@ export default function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSV
           {step === 2 && (
             <button
               onClick={handleSave}
-              disabled={isSaving || !transactions.some(t => t.selected)}
+              disabled={isSaving || !transactions.some(t => t.selected) || addingCategoryForTxId !== null}
               className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isSaving ? (

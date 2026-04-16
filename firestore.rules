@@ -57,7 +57,15 @@ service cloud.firestore {
              data.date is string &&
              data.createdAt is string &&
              (!('recurringId' in data) || data.recurringId is string) &&
-             (!('isPending' in data) || data.isPending is bool);
+             (!('isPending' in data) || data.isPending is bool) &&
+             (!('responsible' in data) || (data.responsible == null || data.responsible is string)) &&
+             (!('source' in data) || data.source is string) &&
+             (!('isInstallment' in data) || data.isInstallment is bool) &&
+             (!('installmentNumber' in data) || data.installmentNumber is number) &&
+             (!('totalInstallments' in data) || data.totalInstallments is number) &&
+             (!('installmentId' in data) || data.installmentId is string) &&
+             (!('hash' in data) || data.hash is string) &&
+             (!('importBatchId' in data) || data.importBatchId is string);
     }
 
     function isValidRecurringTransaction(data) {
