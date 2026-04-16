@@ -361,6 +361,13 @@ export default function Transactions() {
               </button>
             </div>
 
+            <div className="bg-amber-100/50 p-4 rounded-xl border border-amber-200/50">
+              <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-1 flex items-center gap-2">
+                <Lightbulb className="w-3 h-3" /> Principal Ponto de Atenção
+              </h3>
+              <p className="text-amber-900 font-medium">{aiInsights.pontoAtencao}</p>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-white/40">
                 <p className="text-xs text-amber-700 font-medium uppercase tracking-wider mb-1">Total Gasto</p>
@@ -377,20 +384,19 @@ export default function Transactions() {
             </div>
 
             <div className="space-y-4">
-              <p className="text-amber-900 leading-relaxed italic">"{aiInsights.mensagemIA}"</p>
+              <div className="bg-white/40 p-4 rounded-xl border border-white/20">
+                <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-2 flex items-center gap-2">
+                  💬 Resumo do Mês
+                </h3>
+                <p className="text-amber-900 leading-relaxed italic">"{aiInsights.mensagemIA}"</p>
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-3">
                   <h3 className="flex items-center gap-2 font-bold text-amber-900 text-sm">
-                    <Lightbulb className="w-4 h-4" /> Insights e Alertas
+                    ⚠️ Insights e Alertas
                   </h3>
                   <ul className="space-y-2">
-                    {aiInsights.alertas.map((alerta, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-amber-800">
-                        <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
-                        {alerta}
-                      </li>
-                    ))}
                     {aiInsights.insights.map((insight, i) => (
                       <li key={i} className="flex items-start gap-2 text-sm text-amber-800">
                         <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
@@ -402,7 +408,7 @@ export default function Transactions() {
 
                 <div className="space-y-3">
                   <h3 className="flex items-center gap-2 font-bold text-amber-900 text-sm">
-                    <ArrowDownCircle className="w-4 h-4" /> Oportunidades de Economia
+                    💰 Oportunidades de Economia
                   </h3>
                   <div className="space-y-2">
                     {aiInsights.oportunidades.map((op, i) => (
@@ -411,6 +417,12 @@ export default function Transactions() {
                         <span className="text-sm font-bold text-green-700">-{formatCurrency(op.economiaEstimada)}</span>
                       </div>
                     ))}
+                    {aiInsights.totalEconomiaEstimada > 0 && (
+                      <div className="bg-green-100/50 p-3 rounded-lg border border-green-200/50 flex justify-between items-center mt-4">
+                        <span className="text-sm font-bold text-green-800">Economia Total Estimada</span>
+                        <span className="text-lg font-bold text-green-700">{formatCurrency(aiInsights.totalEconomiaEstimada)}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
