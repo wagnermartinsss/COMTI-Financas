@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePeriod } from '../contexts/PeriodContext';
 import { db, handleFirestoreError, OperationType, auth } from '../lib/firebase';
 import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, addDoc } from 'firebase/firestore';
 import { formatCurrency } from '../lib/utils';
-import { Plus, Trash2, ArrowUpCircle, ArrowDownCircle, RefreshCw, CalendarPlus, Upload, CreditCard, User } from 'lucide-react';
+import { Plus, Trash2, ArrowUpCircle, ArrowDownCircle, RefreshCw, CalendarPlus, Upload, CreditCard, User, Search, Filter, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import MonthSelector from '../components/MonthSelector';
@@ -42,6 +42,8 @@ export default function Transactions() {
   const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
   const [deleteFutureRecurrences, setDeleteFutureRecurrences] = useState(false);
   const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -126,7 +128,25 @@ export default function Transactions() {
     setIsModalOpen(true);
   };
 
-  const filteredTransactions = transactions.filter(t => typeFilter === 'all' || t.type === typeFilter);
+  const uniqueCategories = useMemo(() => {
+    const cats = new Set(transactions.map((t) => t.category));
+    return Array.from(cats).sort();
+  }, [transactions]);
+
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((t) => {
+      const matchType = typeFilter === 'all' || t.type === typeFilter;
+      const matchSearch = t.description.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchCategory = categoryFilter === '' || t.category === categoryFilter;
+      return matchType && matchSearch && matchCategory;
+    });
+  }, [transactions, typeFilter, searchQuery, categoryFilter]);
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setCategoryFilter('');
+    setTypeFilter('all');
+  };
 
   if (loading) {
     return <div className="flex items-center justify-center h-64">Carregando...</div>;
@@ -166,31 +186,82 @@ export default function Transactions() {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-4 border-b border-gray-100 flex gap-2 overflow-x-auto">
-          <button
-            onClick={() => setTypeFilter('all')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-              typeFilter === 'all' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            Todas
-          </button>
-          <button
-            onClick={() => setTypeFilter('income')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-              typeFilter === 'income' ? 'bg-green-600 text-white' : 'bg-green-50 text-green-700 hover:bg-green-100'
-            }`}
-          >
-            Receitas
-          </button>
-          <button
-            onClick={() => setTypeFilter('expense')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-              typeFilter === 'expense' ? 'bg-red-600 text-white' : 'bg-red-50 text-red-700 hover:bg-red-100'
-            }`}
-          >
-            Despesas
-          </button>
+        {/* Filters Top Bar */}
+        <div className="p-4 border-b border-gray-100 flex flex-col md:flex-row gap-4">
+          <div className="flex gap-2 overflow-x-auto flex-shrink-0">
+            <button
+              onClick={() => setTypeFilter('all')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                typeFilter === 'all' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              Todas
+            </button>
+            <button
+              onClick={() => setTypeFilter('income')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                typeFilter === 'income' ? 'bg-green-600 text-white' : 'bg-green-50 text-green-700 hover:bg-green-100'
+              }`}
+            >
+              Receitas
+            </button>
+            <button
+              onClick={() => setTypeFilter('expense')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                typeFilter === 'expense' ? 'bg-red-600 text-white' : 'bg-red-50 text-red-700 hover:bg-red-100'
+              }`}
+            >
+              Despesas
+            </button>
+          </div>
+
+          <div className="flex-1 flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-4 w-4 text-gray-400" />
+              </div>
+              <input
+                type="text"
+                placeholder="Buscar por descrição..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 w-full rounded-lg border-gray-200 bg-gray-50 text-sm focus:bg-white focus:ring-blue-500 focus:border-blue-500 transition-colors py-2"
+              />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            <div className="relative sm:w-48 flex-shrink-0">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                <Filter className="h-4 w-4" />
+              </div>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="pl-9 w-full rounded-lg border-gray-200 bg-gray-50 text-sm focus:bg-white focus:ring-blue-500 focus:border-blue-500 appearance-none py-2"
+              >
+                <option value="">Todas as categorias</option>
+                {uniqueCategories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          
+          {(searchQuery || categoryFilter || typeFilter !== 'all') && (
+            <button 
+              onClick={clearFilters}
+              className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors whitespace-nowrap self-center sm:hidden md:block"
+            >
+              Limpar
+            </button>
+          )}
         </div>
 
         <div className="overflow-x-auto">

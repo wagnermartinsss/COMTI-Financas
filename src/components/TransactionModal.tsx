@@ -31,6 +31,11 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
   const [categories, setCategories] = useState<{id: string, name: string, type: string}[]>([]);
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+  
+  const [showCategoryConfirm, setShowCategoryConfirm] = useState(false);
+  const [similarTransactions, setSimilarTransactions] = useState<string[]>([]);
+  const [pendingUpdateData, setPendingUpdateData] = useState<any>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const defaultCategories = [
     { id: 'd1', name: 'Alimentação', type: 'expense' },
@@ -129,6 +134,7 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
     }
 
     try {
+      setIsSaving(true);
       // Ensure the date is saved correctly without timezone shifts
       // We append T12:00:00Z to ensure it's treated as midday UTC, avoiding day shifts
       const dateString = `${date}T12:00:00Z`;
@@ -145,6 +151,25 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
         };
         if (responsible) updateData.responsible = responsible;
         else updateData.responsible = null;
+
+        if (transactionToEdit.category !== category) {
+          const q = query(collection(db, 'transactions'), 
+            where('ownerId', '==', ownerId),
+            where('description', '==', description)
+          );
+          const snapshot = await getDocs(q);
+          const identicalOtherTxs = snapshot.docs
+            .filter(d => d.id !== transactionToEdit.id && d.data().category !== category)
+            .map(d => d.id);
+          
+          if (identicalOtherTxs.length > 0) {
+            setSimilarTransactions(identicalOtherTxs);
+            setPendingUpdateData(updateData);
+            setShowCategoryConfirm(true);
+            setIsSaving(false);
+            return;
+          }
+        }
 
         await updateDoc(doc(db, 'transactions', transactionToEdit.id), updateData);
 
@@ -205,6 +230,53 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
     } catch (error) {
       handleFirestoreError(error, transactionToEdit ? OperationType.UPDATE : OperationType.CREATE, 'transactions');
       toast.error('Erro ao salvar transação.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const executeUpdateWithSimilar = async (updateAll: boolean) => {
+    if (!user || !ownerId || !pendingUpdateData) return;
+    try {
+      setIsSaving(true);
+      await updateDoc(doc(db, 'transactions', transactionToEdit.id), pendingUpdateData);
+
+      if (updateAll && similarTransactions.length > 0) {
+        const batchPromises = similarTransactions.map(id => 
+          updateDoc(doc(db, 'transactions', id), { category: pendingUpdateData.category })
+        );
+        await Promise.all(batchPromises);
+      }
+
+      const numericAmount = parseInt(amountStr || '0', 10) / 100;
+      const dateString = `${date}T12:00:00Z`;
+
+      if (isRecurring) {
+        await addDoc(collection(db, 'recurringTransactions'), {
+          ownerId,
+          creatorId: user.uid,
+          type,
+          amount: isVariableAmount ? 0 : numericAmount,
+          category,
+          description,
+          frequency,
+          startDate: dateString,
+          isVariableAmount,
+          createdAt: new Date().toISOString()
+        });
+        await processRecurringTransactions(ownerId);
+        toast.success('Transação atualizada e recorrência criada!');
+      } else {
+        toast.success(updateAll ? 'Transações atualizadas!' : 'Transação atualizada!');
+      }
+
+      onClose();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'transactions');
+      toast.error('Erro ao salvar transação.');
+    } finally {
+      setIsSaving(false);
+      setShowCategoryConfirm(false);
     }
   };
 
@@ -398,13 +470,42 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
           <div className="pt-6 border-t border-gray-100">
             <button
               type="submit"
-              className="w-full py-4 px-4 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200"
+              disabled={isSaving}
+              className="w-full py-4 px-4 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200 disabled:opacity-50"
             >
-              Salvar Transação
+              {isSaving ? 'Salvando...' : 'Salvar Transação'}
             </button>
           </div>
         </form>
       </div>
+
+      {/* Category Update Confirm Modal */}
+      {showCategoryConfirm && (
+        <div className="absolute inset-0 z-[60] bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl scale-[1.02]">
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Atualizar Categoria</h3>
+            <p className="text-gray-600 mb-6 leading-relaxed">
+              Encontramos outras <strong>{similarTransactions.length}</strong> {similarTransactions.length === 1 ? 'transação' : 'transações'} com a mesma descrição (<span className="text-gray-900 font-medium">"{description}"</span>). Deseja atualizar a categoria delas também?
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => executeUpdateWithSimilar(true)}
+                disabled={isSaving}
+                className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                Atualizar Todas
+              </button>
+              <button
+                onClick={() => executeUpdateWithSimilar(false)}
+                disabled={isSaving}
+                className="w-full py-3 bg-white text-gray-700 border border-gray-200 rounded-xl font-bold hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Apenas Esta
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
