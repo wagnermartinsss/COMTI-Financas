@@ -6,7 +6,7 @@ import { formatCurrency } from '../lib/utils';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { Download, FileText, FileSpreadsheet, Filter } from 'lucide-react';
+import { Download, FileText, FileSpreadsheet, Filter, X } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
@@ -36,6 +36,7 @@ export default function Reports() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showPDFExportModal, setShowPDFExportModal] = useState(false);
   
   const chartRef = useRef<HTMLDivElement>(null);
   const pdfChartRef = useRef<HTMLDivElement>(null);
@@ -188,57 +189,155 @@ export default function Reports() {
     toast.success('Relatório CSV exportado!');
   };
 
-  const exportToPDF = async () => {
+  const exportToPDF = async (reportType: 'simple' | 'complete' = 'simple') => {
     const doc = new jsPDF();
     
-    doc.setFontSize(18);
-    doc.text('Relatório Financeiro', 14, 22);
+    // Header
+    doc.setFontSize(22);
+    doc.setTextColor(31, 41, 55); // Dark gray
+    doc.setFont('helvetica', 'bold');
+    doc.text(reportType === 'simple' ? 'Relatório Simples' : 'Relatório Completo', 14, 22);
     
-    doc.setFontSize(11);
-    doc.text(`Período: ${format(parseISO(startDate), 'dd/MM/yyyy')} a ${format(parseISO(endDate), 'dd/MM/yyyy')}`, 14, 30);
+    doc.setFontSize(10);
+    doc.setTextColor(107, 114, 128); // Medium gray
+    doc.setFont('helvetica', 'normal');
+    const periodText = `Período: ${format(parseISO(startDate), 'dd/MM/yyyy')} a ${format(parseISO(endDate), 'dd/MM/yyyy')}`;
+    doc.text(periodText, 14, 28);
     
-    doc.text(`Total Receitas: ${formatCurrency(totalIncome)}`, 14, 40);
-    doc.text(`Total Despesas: ${formatCurrency(totalExpense)}`, 14, 46);
-    doc.text(`Saldo: ${formatCurrency(balance)}`, 14, 52);
+    doc.setTextColor(0, 0, 0); // Reset for data
+    
+    if (reportType === 'simple') {
+      // Visual summary cards in the PDF
+      let summaryY = 42;
+      
+      // Receitas
+      doc.setFontSize(10);
+      doc.setTextColor(107, 114, 128);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Total Receitas', 14, summaryY);
+      doc.setFontSize(14);
+      doc.setTextColor(22, 163, 74); 
+      doc.setFont('helvetica', 'bold');
+      doc.text(formatCurrency(totalIncome), 14, summaryY + 7);
 
-    let currentY = 60;
+      // Despesas
+      doc.setFontSize(10);
+      doc.setTextColor(107, 114, 128);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Total Despesas', 75, summaryY);
+      doc.setFontSize(14);
+      doc.setTextColor(220, 38, 38);
+      doc.setFont('helvetica', 'bold');
+      doc.text(formatCurrency(totalExpense), 75, summaryY + 7);
 
-    const tableColumn = ["Data", "Descrição", "Categoria", "Tipo", "Valor"];
-    const tableRows = [];
+      // Saldo
+      doc.setFontSize(10);
+      doc.setTextColor(107, 114, 128);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Saldo do Período', 140, summaryY);
+      doc.setFontSize(14);
+      const isNegative = balance < 0;
+      doc.setTextColor(isNegative ? 220 : 59, isNegative ? 38 : 130, isNegative ? 38 : 246);
+      doc.setFont('helvetica', 'bold');
+      doc.text(formatCurrency(balance), 140, summaryY + 7);
 
-    filteredTransactions.forEach(t => {
-      const transactionData = [
-        format(new Date(t.date.split('T')[0] + 'T12:00:00'), "dd/MM/yyyy"),
-        t.description,
-        t.category,
-        t.type === 'income' ? 'Receita' : 'Despesa',
-        formatCurrency(t.amount)
-      ];
-      tableRows.push(transactionData);
-    });
+      // Border line for elegance
+      doc.setDrawColor(243, 244, 246);
+      doc.line(14, summaryY + 14, doc.internal.pageSize.getWidth() - 14, summaryY + 14);
 
-    autoTable(doc, {
-      head: [tableColumn],
-      body: tableRows,
-      startY: currentY,
-      theme: 'grid',
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: [59, 130, 246] },
-      didParseCell: function(data) {
-        if (data.section === 'body' && data.column.index === 4) {
-          const type = data.row.raw[3];
-          if (type === 'Receita') {
-            data.cell.styles.textColor = [22, 163, 74];
-          } else if (type === 'Despesa') {
-            data.cell.styles.textColor = [220, 38, 38];
-          }
+      // Prepare fallback for chart positioning
+      (doc as any).lastAutoTable = { finalY: summaryY + 20 };
+    } else {
+      // Complete report: Only expenses grouped by category
+      const expenseTxs = filteredTransactions.filter(t => t.type === 'expense');
+      const groupedExpenses = expenseTxs.reduce((acc, curr) => {
+        if (!acc[curr.category]) acc[curr.category] = [];
+        acc[curr.category].push(curr);
+        return acc;
+      }, {} as Record<string, Transaction[]>);
+
+      let currentY = 40;
+
+      Object.entries(groupedExpenses).forEach(([category, txs]) => {
+        const categoryTxs = txs as Transaction[];
+        // Check if we need a new page
+        if (currentY > doc.internal.pageSize.getHeight() - 40) {
+          doc.addPage();
+          currentY = 25;
         }
+
+        // Category Title
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(31, 41, 55); // Dark gray for professional look
+        doc.text(category, 14, currentY);
+        currentY += 4;
+
+        const tableColumn = ["Data", "Descrição", "Valor"];
+        const tableRows = categoryTxs.map(t => [
+          format(new Date(t.date.split('T')[0] + 'T12:00:00'), "dd/MM/yyyy"),
+          t.description,
+          formatCurrency(t.amount)
+        ]);
+
+        autoTable(doc, {
+          head: [tableColumn],
+          body: tableRows,
+          startY: currentY,
+          theme: 'striped',
+          styles: { 
+            fontSize: 9, 
+            cellPadding: 3, 
+            lineColor: [243, 244, 246],
+            lineWidth: 0.1
+          },
+          headStyles: { 
+            fillColor: [249, 250, 251], 
+            textColor: [107, 114, 128], 
+            fontStyle: 'bold',
+            halign: 'left'
+          },
+          columnStyles: {
+            2: { halign: 'right' }
+          },
+          margin: { left: 14, right: 14 }
+        });
+
+        currentY = (doc as any).lastAutoTable.finalY + 8;
+        
+        const categoryTotal = categoryTxs.reduce((sum, t) => sum + t.amount, 0);
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(17, 24, 39); // Almost black
+        doc.text(`Total da categoria: ${formatCurrency(categoryTotal)}`, doc.internal.pageSize.getWidth() - 14, currentY, { align: 'right' });
+        
+        currentY += 16; // Major spacing between categories
+        doc.setTextColor(0, 0, 0);
+        doc.setFont('helvetica', 'normal');
+      });
+
+      // Final total of expenses
+      if (currentY > doc.internal.pageSize.getHeight() - 30) {
+        doc.addPage();
+        currentY = 25;
+      } else {
+        currentY += 4;
       }
-    });
 
-    let finalY = (doc as any).lastAutoTable.finalY || currentY;
+      // Final summary visually separated
+      doc.setDrawColor(229, 231, 235);
+      doc.line(14, currentY, doc.internal.pageSize.getWidth() - 14, currentY);
+      currentY += 12;
 
-    if (pdfChartRef.current && pieData.length > 0) {
+      doc.setFontSize(15);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(220, 38, 38); // Red for emphasis
+      doc.text(`Total Geral de Despesas: ${formatCurrency(totalExpense)}`, doc.internal.pageSize.getWidth() - 14, currentY, { align: 'right' });
+    }
+
+    let finalY = (doc as any).lastAutoTable?.finalY || 60;
+
+    if (pdfChartRef.current && pieData.length > 0 && reportType === 'simple') {
       try {
         const canvas = await html2canvas(pdfChartRef.current, { scale: 2 });
         const imgData = canvas.toDataURL('image/png');
@@ -258,14 +357,14 @@ export default function Reports() {
       }
     }
 
- const blob = doc.output('blob');
-const url = URL.createObjectURL(blob);
-
-if (/Mobi|Android|iPhone/i.test(navigator.userAgent)) {
-  window.location.href = url; // mobile
-} else {
-  window.open(url, '_blank'); // desktop
-}
+    const blob = doc.output('blob');
+    const url = URL.createObjectURL(blob);
+    
+    if (/Mobi|Android|iPhone/i.test(navigator.userAgent)) {
+      window.location.href = url; // mobile
+    } else {
+      window.open(url, '_blank'); // desktop
+    }
     toast.success('Relatório PDF exportado!');
   };
 
@@ -282,7 +381,7 @@ if (/Mobi|Android|iPhone/i.test(navigator.userAgent)) {
             CSV
           </button>
           <button
-            onClick={exportToPDF}
+            onClick={() => setShowPDFExportModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors"
           >
             <FileText className="w-4 h-4" />
@@ -412,8 +511,8 @@ if (/Mobi|Android|iPhone/i.test(navigator.userAgent)) {
                         <Pie
                           data={pieData}
                           cx="50%"
-                          cy={isMobile ? "40%" : "45%"}
-                          innerRadius={isMobile ? 60 : 50}
+                          cy="40%"
+                          innerRadius={isMobile ? 50 : 50}
                           outerRadius={isMobile ? 80 : 80}
                           paddingAngle={2}
                           dataKey="value"
@@ -426,15 +525,19 @@ if (/Mobi|Android|iPhone/i.test(navigator.userAgent)) {
                         </Pie>
                         <Tooltip content={<CustomTooltip />} />
                         <Legend 
-                          verticalAlign={isMobile ? "bottom" : "bottom"} 
-                          layout={isMobile ? "horizontal" : "horizontal"}
+                          verticalAlign="bottom" 
+                          layout="horizontal"
                           align="center"
                           iconType="circle" 
-                          wrapperStyle={isMobile ? { paddingTop: '20px' } : undefined}
+                          wrapperStyle={{ paddingTop: '10px' }}
                           formatter={(value, entry: any) => {
                             const dataItem = pieData.find(d => d.name === value);
                             const percentage = dataItem ? dataItem.percentage : 0;
-                            return `${value} (${percentage.toFixed(1)}%)`;
+                            return (
+                              <span className="text-gray-600 text-[11px] whitespace-nowrap">
+                                {value} <span className="text-gray-400">({percentage.toFixed(1)}%)</span>
+                              </span>
+                            );
                           }}
                         />
                       </PieChart>
@@ -499,6 +602,69 @@ if (/Mobi|Android|iPhone/i.test(navigator.userAgent)) {
         </>
       )}
 
+      {/* Modal para seleção de tipo de PDF */}
+      {showPDFExportModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <FileText className="w-6 h-6 text-red-600" />
+                Exportar PDF
+              </h3>
+              <button 
+                onClick={() => setShowPDFExportModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <X className="w-6 h-6 text-gray-400" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <p className="text-gray-600 text-sm">Escolha o formato do relatório que deseja exportar:</p>
+              
+              <div className="space-y-3">
+                <button
+                  onClick={() => {
+                    exportToPDF('simple');
+                    setShowPDFExportModal(false);
+                  }}
+                  className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-gray-100 hover:border-red-100 hover:bg-red-50 group transition-all"
+                >
+                  <div className="text-left">
+                    <p className="font-bold text-gray-900 group-hover:text-red-700 transition-colors">Relatório Simples</p>
+                    <p className="text-xs text-gray-500">Resumo visual com os totais de receitas, despesas e saldo do período.</p>
+                  </div>
+                  <FileText className="w-5 h-5 text-gray-300 group-hover:text-red-500 transition-colors" />
+                </button>
+
+                <button
+                  onClick={() => {
+                    exportToPDF('complete');
+                    setShowPDFExportModal(false);
+                  }}
+                  className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-gray-100 hover:border-red-100 hover:bg-red-50 group transition-all"
+                >
+                  <div className="text-left">
+                    <p className="font-bold text-gray-900 group-hover:text-red-700 transition-colors">Relatório Completo</p>
+                    <p className="text-xs text-gray-500">Agrupado por categoria, com subtotais e total de despesas.</p>
+                  </div>
+                  <Download className="w-5 h-5 text-gray-300 group-hover:text-red-500 transition-colors" />
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-4 text-center">
+              <button
+                onClick={() => setShowPDFExportModal(false)}
+                className="text-sm text-gray-500 hover:text-gray-700 font-medium"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Hidden chart for PDF export */}
       <div className="absolute left-[-9999px] top-[-9999px]">
         <div ref={pdfChartRef} className="w-[800px] h-[400px] bg-white p-8 flex items-center justify-center">
@@ -508,8 +674,8 @@ if (/Mobi|Android|iPhone/i.test(navigator.userAgent)) {
                 data={pieData}
                 cx={300}
                 cy={200}
-                innerRadius={90}
-                outerRadius={130}
+                innerRadius={70}
+                outerRadius={120}
                 paddingAngle={2}
                 dataKey="value"
                 stroke="none"
