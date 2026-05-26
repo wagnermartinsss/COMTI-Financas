@@ -4,7 +4,7 @@ import { usePeriod } from '../contexts/PeriodContext';
 import { db, handleFirestoreError, OperationType, auth } from '../lib/firebase';
 import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, addDoc, updateDoc } from 'firebase/firestore';
 import { formatCurrency } from '../lib/utils';
-import { Plus, Trash2, ArrowUpCircle, ArrowDownCircle, RefreshCw, CalendarPlus, Upload, CreditCard, User, Search, Filter, X } from 'lucide-react';
+import { Plus, Trash2, ArrowUpCircle, ArrowDownCircle, RefreshCw, CalendarPlus, Upload, CreditCard, User, Search, Filter, X, ChevronUp, ChevronDown, ArrowUpDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import MonthSelector from '../components/MonthSelector';
@@ -31,6 +31,8 @@ interface Transaction {
   isPaid?: boolean;
 }
 
+export type SortColumn = 'description' | 'category' | 'date' | 'dueDate' | 'isPaid' | 'amount';
+
 export default function Transactions() {
   const { ownerId } = useAuth();
   const { currentDate, startDateISO, endDateISO } = usePeriod();
@@ -46,6 +48,8 @@ export default function Transactions() {
   const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [sortColumn, setSortColumn] = useState<SortColumn>('date');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -149,19 +153,73 @@ export default function Transactions() {
   }, [transactions]);
 
   const filteredTransactions = useMemo(() => {
-    return transactions.filter((t) => {
+    const filtered = transactions.filter((t) => {
       const matchType = typeFilter === 'all' || t.type === typeFilter;
       const matchSearch = t.description.toLowerCase().includes(searchQuery.toLowerCase());
       const matchCategory = categoryFilter === '' || t.category === categoryFilter;
       return matchType && matchSearch && matchCategory;
     });
-  }, [transactions, typeFilter, searchQuery, categoryFilter]);
+
+    return filtered.sort((a, b) => {
+      const dir = sortDirection === 'asc' ? 1 : -1;
+      
+      switch (sortColumn) {
+        case 'description':
+          return dir * a.description.localeCompare(b.description);
+        case 'category':
+          return dir * a.category.localeCompare(b.category);
+        case 'date':
+          return dir * (new Date(a.date).getTime() - new Date(b.date).getTime());
+        case 'dueDate':
+          const aDue = a.type === 'expense' && a.dueDate ? a.dueDate : (sortDirection === 'asc' ? 999 : -999);
+          const bDue = b.type === 'expense' && b.dueDate ? b.dueDate : (sortDirection === 'asc' ? 999 : -999);
+          return dir * (aDue - bDue);
+        case 'isPaid':
+          const aPaid = (a.type === 'expense' && a.dueDate) ? (a.isPaid ? 1 : 0) : -1;
+          const bPaid = (b.type === 'expense' && b.dueDate) ? (b.isPaid ? 1 : 0) : -1;
+          return dir * (aPaid - bPaid);
+        case 'amount':
+          return dir * (a.amount - b.amount);
+        default:
+          return 0;
+      }
+    });
+  }, [transactions, typeFilter, searchQuery, categoryFilter, sortColumn, sortDirection]);
+
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
 
   const clearFilters = () => {
     setSearchQuery('');
     setCategoryFilter('');
     setTypeFilter('all');
   };
+
+  const renderSortHeader = (column: SortColumn, label: string, justify: 'start' | 'center' | 'end' = 'start') => {
+    const justifyClass = justify === 'center' ? 'justify-center' : justify === 'end' ? 'justify-end' : 'justify-start';
+    return (
+    <th 
+      className="p-4 font-medium text-gray-500 text-sm cursor-pointer hover:bg-gray-100 transition-colors select-none"
+      onClick={() => handleSort(column)}
+    >
+      <div className={`flex items-center gap-1 group ${justifyClass}`}>
+        {label}
+        <div className="flex flex-col items-center justify-center w-3">
+          {sortColumn === column ? (
+            sortDirection === 'asc' ? <ChevronUp className="w-3 h-3 text-blue-600" /> : <ChevronDown className="w-3 h-3 text-blue-600" />
+          ) : (
+            <ArrowUpDown className="w-3 h-3 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+          )}
+        </div>
+      </div>
+    </th>
+  )};
 
   if (loading) {
     return <div className="flex items-center justify-center h-64">Carregando...</div>;
@@ -366,12 +424,12 @@ export default function Transactions() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="p-4 font-medium text-gray-500 text-sm">Descrição</th>
-                  <th className="p-4 font-medium text-gray-500 text-sm">Categoria</th>
-                  <th className="p-4 font-medium text-gray-500 text-sm">Data</th>
-                  <th className="p-4 font-medium text-gray-500 text-sm">Venc.</th>
-                  <th className="p-4 font-medium text-gray-500 text-sm text-center">Pago</th>
-                  <th className="p-4 font-medium text-gray-500 text-sm text-right">Valor</th>
+                  {renderSortHeader('description', 'Descrição')}
+                  {renderSortHeader('category', 'Categoria')}
+                  {renderSortHeader('date', 'Data')}
+                  {renderSortHeader('dueDate', 'Venc.')}
+                  {renderSortHeader('isPaid', 'Pago', 'center')}
+                  {renderSortHeader('amount', 'Valor', 'end')}
                   <th className="p-4 font-medium text-gray-500 text-sm text-center">Ações</th>
                 </tr>
               </thead>
