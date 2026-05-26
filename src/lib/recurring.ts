@@ -57,7 +57,7 @@ export async function processRecurringTransactions(ownerId: string) {
 
         if (!exists && !isSkipped) {
           const newTxRef = doc(collection(db, 'transactions'));
-          batch.set(newTxRef, {
+          const txData: any = {
             ownerId: rec.ownerId,
             creatorId: userId,
             type: rec.type,
@@ -68,7 +68,11 @@ export async function processRecurringTransactions(ownerId: string) {
             createdAt: new Date().toISOString(),
             recurringId: rec.id,
             isPending: rec.isVariableAmount ? true : false
-          });
+          };
+          if (rec.type === 'expense' && rec.dueDate) {
+            txData.dueDate = rec.dueDate;
+          }
+          batch.set(newTxRef, txData);
           hasNew = true;
         }
 

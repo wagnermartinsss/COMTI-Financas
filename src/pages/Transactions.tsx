@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePeriod } from '../contexts/PeriodContext';
 import { db, handleFirestoreError, OperationType, auth } from '../lib/firebase';
-import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, addDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, addDoc, updateDoc } from 'firebase/firestore';
 import { formatCurrency } from '../lib/utils';
 import { Plus, Trash2, ArrowUpCircle, ArrowDownCircle, RefreshCw, CalendarPlus, Upload, CreditCard, User, Search, Filter, X } from 'lucide-react';
 import { format } from 'date-fns';
@@ -27,6 +27,8 @@ interface Transaction {
   isInstallment?: boolean;
   installmentNumber?: number;
   totalInstallments?: number;
+  dueDate?: number;
+  isPaid?: boolean;
 }
 
 export default function Transactions() {
@@ -79,6 +81,19 @@ export default function Transactions() {
 
     return () => unsubscribe();
   }, [ownerId, startDateISO, endDateISO]);
+
+  const handleTogglePaid = async (e: React.MouseEvent, transaction: Transaction) => {
+    e.stopPropagation();
+    try {
+      await updateDoc(doc(db, 'transactions', transaction.id), {
+        isPaid: !transaction.isPaid
+      });
+      toast.success(transaction.isPaid ? 'Marcado como não pago.' : 'Marcado como pago!');
+    } catch (error) {
+      console.error('Erro ao atualizar status de pagamento:', error);
+      toast.error('Erro ao atualizar status.');
+    }
+  };
 
   const handleDeleteClick = (e: React.MouseEvent, transaction: Transaction) => {
     e.stopPropagation();
@@ -297,6 +312,21 @@ export default function Transactions() {
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
                           <p className="text-xs text-gray-500">{transaction.category}</p>
+                          {transaction.type === 'expense' && transaction.dueDate && (
+                            <span className="flex items-center gap-1 text-[10px] font-medium text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                              Venc: Dia {transaction.dueDate}
+                            </span>
+                          )}
+                          {transaction.type === 'expense' && transaction.dueDate && (
+                            <button
+                              onClick={(e) => handleTogglePaid(e, transaction)}
+                              className={`flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded transition-colors ${
+                                transaction.isPaid ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                              }`}
+                            >
+                              {transaction.isPaid ? '✓ Pago' : 'Pendente'}
+                            </button>
+                          )}
                           {transaction.responsible && (
                             <span className="flex items-center gap-1 text-[10px] font-medium text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
                               <User className="w-3 h-3" />
@@ -339,6 +369,8 @@ export default function Transactions() {
                   <th className="p-4 font-medium text-gray-500 text-sm">Descrição</th>
                   <th className="p-4 font-medium text-gray-500 text-sm">Categoria</th>
                   <th className="p-4 font-medium text-gray-500 text-sm">Data</th>
+                  <th className="p-4 font-medium text-gray-500 text-sm">Venc.</th>
+                  <th className="p-4 font-medium text-gray-500 text-sm text-center">Pago</th>
                   <th className="p-4 font-medium text-gray-500 text-sm text-right">Valor</th>
                   <th className="p-4 font-medium text-gray-500 text-sm text-center">Ações</th>
                 </tr>
@@ -386,6 +418,22 @@ export default function Transactions() {
                     </td>
                     <td className="p-4 text-gray-600">
                       {format(new Date(transaction.date.split('T')[0] + 'T12:00:00'), "dd MMM yyyy", { locale: ptBR })}
+                    </td>
+                    <td className="p-4 text-gray-600 text-sm">
+                      {transaction.type === 'expense' && transaction.dueDate ? `Dia ${transaction.dueDate}` : '-'}
+                    </td>
+                    <td className="p-4 text-center">
+                      {transaction.type === 'expense' && transaction.dueDate ? (
+                        <input
+                          type="checkbox"
+                          checked={!!transaction.isPaid}
+                          onChange={(e) => handleTogglePaid(e as any, transaction)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-5 h-5 text-green-600 rounded border-gray-300 focus:ring-green-500 cursor-pointer"
+                        />
+                      ) : (
+                        <span className="text-gray-300">-</span>
+                      )}
                     </td>
                     <td className={`p-4 text-right font-medium ${
                       transaction.isPending ? 'text-orange-500' : transaction.type === 'income' ? 'text-green-600' : 'text-red-600'

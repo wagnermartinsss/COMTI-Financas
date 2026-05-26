@@ -26,6 +26,7 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
   const [isRecurring, setIsRecurring] = useState(false);
   const [frequency, setFrequency] = useState<'weekly' | 'monthly' | 'yearly'>('monthly');
   const [isVariableAmount, setIsVariableAmount] = useState(false);
+  const [dueDate, setDueDate] = useState<number | ''>('');
 
   // Categories state
   const [categories, setCategories] = useState<{id: string, name: string, type: string}[]>([]);
@@ -76,6 +77,7 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
       setSource(transactionToEdit.source || 'manual');
       setIsRecurring(false); // Can't edit recurrence from a single transaction instance easily here
       setIsVariableAmount(false);
+      setDueDate(transactionToEdit.dueDate || '');
     } else {
       setType('expense');
       setAmountStr('');
@@ -87,6 +89,7 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
       setIsRecurring(false);
       setFrequency('monthly');
       setIsVariableAmount(false);
+      setDueDate('');
     }
   }, [isOpen, ownerId, transactionToEdit]);
 
@@ -151,6 +154,12 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
         };
         if (responsible) updateData.responsible = responsible;
         else updateData.responsible = null;
+        
+        if (type === 'expense' && dueDate !== '') {
+          updateData.dueDate = parseInt(dueDate.toString(), 10);
+        } else {
+          updateData.dueDate = null;
+        }
 
         if (transactionToEdit.category !== category) {
           const q = query(collection(db, 'transactions'), 
@@ -173,8 +182,21 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
 
         await updateDoc(doc(db, 'transactions', transactionToEdit.id), updateData);
 
+        if (transactionToEdit.recurringId && type === 'expense') {
+          const recRef = doc(db, 'recurringTransactions', transactionToEdit.recurringId);
+          const recUpdateData: any = {};
+          if (dueDate !== '') {
+            recUpdateData.dueDate = parseInt(dueDate.toString(), 10);
+          } else {
+            recUpdateData.dueDate = null;
+          }
+          await updateDoc(recRef, recUpdateData).catch(e => {
+            console.error("Failed to update parent recurring transaction", e);
+          });
+        }
+
         if (isRecurring) {
-          await addDoc(collection(db, 'recurringTransactions'), {
+          const recData: any = {
             ownerId,
             creatorId: user.uid,
             type,
@@ -185,7 +207,11 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
             startDate: dateString,
             isVariableAmount,
             createdAt: new Date().toISOString()
-          });
+          };
+          if (type === 'expense' && dueDate !== '') {
+            recData.dueDate = parseInt(dueDate.toString(), 10);
+          }
+          await addDoc(collection(db, 'recurringTransactions'), recData);
           await processRecurringTransactions(ownerId);
           toast.success('Transação atualizada e recorrência criada!');
         } else {
@@ -193,7 +219,7 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
         }
       } else {
         if (isRecurring) {
-          await addDoc(collection(db, 'recurringTransactions'), {
+          const recData: any = {
             ownerId,
             creatorId: user.uid,
             type,
@@ -204,7 +230,11 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
             startDate: dateString,
             isVariableAmount,
             createdAt: new Date().toISOString()
-          });
+          };
+          if (type === 'expense' && dueDate !== '') {
+            recData.dueDate = parseInt(dueDate.toString(), 10);
+          }
+          await addDoc(collection(db, 'recurringTransactions'), recData);
           await processRecurringTransactions(ownerId);
           toast.success('Transação recorrente criada!');
         } else {
@@ -221,6 +251,9 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
             createdAt: new Date().toISOString()
           };
           if (responsible) txData.responsible = responsible;
+          if (type === 'expense' && dueDate !== '') {
+            txData.dueDate = parseInt(dueDate.toString(), 10);
+          }
 
           await addDoc(collection(db, 'transactions'), txData);
           toast.success('Transação criada!');
@@ -436,6 +469,21 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
                 </select>
               </div>
             </div>
+
+            {type === 'expense' && (isRecurring || (transactionToEdit && transactionToEdit.recurringId)) && (
+              <div className="pt-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Dia do Vencimento (1 a 31)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all bg-gray-50"
+                  placeholder="Ex: 10"
+                />
+              </div>
+            )}
 
             <div className="pt-2">
               <label className="flex items-center gap-3 cursor-pointer p-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">

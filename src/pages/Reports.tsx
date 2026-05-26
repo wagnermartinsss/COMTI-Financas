@@ -506,7 +506,7 @@ export default function Reports() {
               <div className="p-6" ref={chartRef}>
                 {pieData.length > 0 ? (
                   <div className="h-[350px] w-full min-h-0 min-w-0">
-                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                    <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
                           data={pieData}

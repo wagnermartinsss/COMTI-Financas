@@ -24,6 +24,7 @@ interface Recurrence {
   startDate: string;
   creatorId: string;
   ownerId: string;
+  dueDate?: number;
 }
 
 export default function ApplyRecurrencesModal({ isOpen, onClose, currentDate }: ApplyRecurrencesModalProps) {
@@ -31,6 +32,7 @@ export default function ApplyRecurrencesModal({ isOpen, onClose, currentDate }: 
   const [recurrences, setRecurrences] = useState<Recurrence[]>([]);
   const [existingTxRecurringIds, setExistingTxRecurringIds] = useState<Set<string>>(new Set());
   const [skippedRecurringIds, setSkippedRecurringIds] = useState<Set<string>>(new Set());
+  const [skippedRecurringDocs, setSkippedRecurringDocs] = useState<Map<string, string>>(new Map());
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [recurrenceToDelete, setRecurrenceToDelete] = useState<Recurrence | null>(null);
   const [loading, setLoading] = useState(true);
@@ -79,10 +81,14 @@ export default function ApplyRecurrencesModal({ isOpen, onClose, currentDate }: 
         );
         const skipsSnapshot = await getDocs(skipsQuery);
         const skippedIds = new Set<string>();
+        const skipDocs = new Map<string, string>();
         skipsSnapshot.forEach(doc => {
-          skippedIds.add(doc.data().recurringId);
+          const recId = doc.data().recurringId;
+          skippedIds.add(recId);
+          skipDocs.set(recId, doc.id);
         });
         setSkippedRecurringIds(skippedIds);
+        setSkippedRecurringDocs(skipDocs);
         
         // Auto-select those that are not applied and not skipped yet
         const toSelect = new Set<string>();
@@ -154,12 +160,15 @@ export default function ApplyRecurrencesModal({ isOpen, onClose, currentDate }: 
         // Calculate the date for this month
         // Manually parse the date string to avoid timezone shifts
         const [year, month, day] = rec.startDate.split('T')[0].split('-').map(Number);
-        const originalStartDate = new Date(year, month - 1, day, 12, 0, 0);
-        const originalDay = getDate(originalStartDate);
-        const daysInCurrentMonth = getDaysInMonth(currentDate);
         
-        // Use the original day, or the last day of the month if it exceeds
-        const targetDay = Math.min(originalDay, daysInCurrentMonth);
+        let targetDay = day; // default to original day
+        const daysInCurrentMonth = getDaysInMonth(currentDate);
+
+        if (rec.type === 'expense' && rec.dueDate && rec.dueDate >= 1 && rec.dueDate <= 31) {
+          targetDay = Math.min(rec.dueDate, daysInCurrentMonth);
+        } else {
+          targetDay = Math.min(day, daysInCurrentMonth);
+        }
         
         // Create a new date based on currentDate's year and month, but with targetDay
         const targetDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), targetDay, 12, 0, 0);
@@ -168,7 +177,7 @@ export default function ApplyRecurrencesModal({ isOpen, onClose, currentDate }: 
         const dateStr = format(targetDate, 'yyyy-MM-dd');
         
         const newTxRef = doc(collection(db, 'transactions'));
-        batch.set(newTxRef, {
+        const txData: any = {
           ownerId: rec.ownerId,
           creatorId: user.uid,
           type: rec.type,
@@ -179,7 +188,19 @@ export default function ApplyRecurrencesModal({ isOpen, onClose, currentDate }: 
           createdAt: new Date().toISOString(),
           recurringId: rec.id,
           isPending: rec.isVariableAmount ? true : false
-        });
+        };
+        if (rec.type === 'expense' && rec.dueDate) {
+          txData.dueDate = rec.dueDate;
+        }
+        batch.set(newTxRef, txData);
+        
+        // If it was skipped before, delete the skip document
+        if (skippedRecurringDocs.has(rec.id)) {
+          const skipDocId = skippedRecurringDocs.get(rec.id)!;
+          const skipDocRef = doc(db, 'recurringSkips', skipDocId);
+          batch.delete(skipDocRef);
+        }
+        
         hasNew = true;
       });
 
@@ -240,11 +261,11 @@ export default function ApplyRecurrencesModal({ isOpen, onClose, currentDate }: 
                     onClick={() => toggleSelection(rec.id)}
                     className={`p-4 rounded-xl border flex items-center gap-4 transition-colors ${
                       isApplied 
-                        ? 'bg-gray-50 border-gray-200 opacity-75 cursor-not-allowed' 
-                        : isSkipped
-                          ? 'bg-orange-50 border-orange-200 cursor-pointer'
-                          : isSelected
-                            ? 'bg-blue-50 border-blue-200 cursor-pointer'
+                        ? 'bg-gray-50 border-gray-200 opacity-75 cursor-not-allowed'
+                        : isSelected
+                          ? 'bg-blue-50 border-blue-200 cursor-pointer hover:bg-blue-100'
+                          : isSkipped
+                            ? 'bg-orange-50 border-orange-200 cursor-pointer hover:bg-orange-100'
                             : 'bg-white border-gray-200 cursor-pointer hover:bg-gray-50'
                     }`}
                   >
@@ -279,6 +300,12 @@ export default function ApplyRecurrencesModal({ isOpen, onClose, currentDate }: 
                         <span>{rec.category}</span>
                         <span>•</span>
                         <span>{translateFrequency(rec.frequency)}</span>
+                        {rec.type === 'expense' && rec.dueDate && (
+                          <>
+                            <span>•</span>
+                            <span className="text-blue-600 font-semibold bg-blue-50 px-1.5 py-0.5 rounded text-xs">Venc: dia {rec.dueDate}</span>
+                          </>
+                        )}
                         {isApplied && (
                           <>
                             <span>•</span>

@@ -65,7 +65,9 @@ service cloud.firestore {
              (!('totalInstallments' in data) || data.totalInstallments is number) &&
              (!('installmentId' in data) || data.installmentId is string) &&
              (!('hash' in data) || data.hash is string) &&
-             (!('importBatchId' in data) || data.importBatchId is string);
+             (!('importBatchId' in data) || data.importBatchId is string) &&
+             (!('dueDate' in data) || data.dueDate == null || data.dueDate is number) &&
+             (!('isPaid' in data) || data.isPaid is bool);
     }
 
     function isValidRecurringTransaction(data) {
@@ -79,7 +81,8 @@ service cloud.firestore {
              data.frequency in ['weekly', 'monthly', 'yearly'] &&
              data.startDate is string &&
              data.createdAt is string &&
-             (!('isVariableAmount' in data) || data.isVariableAmount is bool);
+             (!('isVariableAmount' in data) || data.isVariableAmount is bool) &&
+             (!('dueDate' in data) || data.dueDate == null || data.dueDate is number);
     }
 
     function isValidCategory(data) {
