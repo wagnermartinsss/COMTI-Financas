@@ -39,7 +39,15 @@ export default function ApplyRecurrencesModal({ isOpen, onClose, currentDate }: 
   const [applying, setApplying] = useState(false);
 
   useEffect(() => {
-    if (!isOpen || !ownerId) return;
+    if (!isOpen) {
+      setRecurrences([]);
+      setExistingTxRecurringIds(new Set());
+      setSkippedRecurringIds(new Set());
+      setSkippedRecurringDocs(new Map());
+      setSelectedIds(new Set());
+      return;
+    }
+    if (!ownerId) return;
 
     const fetchData = async () => {
       setLoading(true);
@@ -342,11 +350,11 @@ export default function ApplyRecurrencesModal({ isOpen, onClose, currentDate }: 
           )}
         </div>
 
-        <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
+        <div className="p-4 sm:p-6 border-t border-gray-100 bg-gray-50 flex flex-col-reverse sm:flex-row justify-end gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-white transition-colors"
+            className="w-full sm:w-auto px-6 py-3 sm:py-2.5 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-white transition-colors text-center"
           >
             Cancelar
           </button>
@@ -354,7 +362,7 @@ export default function ApplyRecurrencesModal({ isOpen, onClose, currentDate }: 
             type="button"
             onClick={handleApply}
             disabled={applying || selectedIds.size === 0}
-            className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="w-full sm:w-auto justify-center px-6 py-3 sm:py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {applying ? 'Aplicando...' : `Aplicar ${selectedIds.size} selecionada(s)`}
           </button>

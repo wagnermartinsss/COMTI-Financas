@@ -45,6 +45,8 @@ export default function Dashboard() {
     let unsubscribe: () => void;
 
     const init = async () => {
+      setProcessingRecurrences(true);
+
       // Process recurrences in background to not block initial data fetch
       processRecurringTransactions(ownerId)
         .then(() => setProcessingRecurrences(false))
@@ -52,8 +54,6 @@ export default function Dashboard() {
           console.error("Recurrence error:", err);
           setProcessingRecurrences(false);
         });
-
-      setProcessingRecurrences(true);
 
       const q = query(
         collection(db, 'transactions'),

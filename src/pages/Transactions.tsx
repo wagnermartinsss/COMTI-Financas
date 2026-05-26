@@ -338,6 +338,21 @@ export default function Transactions() {
         </div>
 
         <div className="overflow-x-auto">
+          {isMobile && filteredTransactions.length > 0 && (
+            <div className="flex bg-gray-50 border-y border-gray-100 text-[11px] font-medium text-gray-500 overflow-x-auto py-2 px-4 gap-4 hide-scrollbar">
+              <span className="flex items-center gap-1 shrink-0 text-gray-400">Ordenar:</span>
+              {(['date', 'description', 'amount', 'category'] as SortColumn[]).map(col => (
+                <button 
+                  key={col}
+                  onClick={() => handleSort(col)} 
+                  className={`flex items-center gap-1 shrink-0 uppercase transition-colors ${sortColumn === col ? 'text-blue-600 font-bold tracking-wide' : 'hover:text-gray-700 tracking-wide'}`}
+                >
+                  {col === 'date' ? 'Data' : col === 'description' ? 'Descrição' : col === 'amount' ? 'Valor' : 'Categoria'}
+                  {sortColumn === col && (sortDirection === 'asc' ? <ChevronUp className="w-3 h-3"/> : <ChevronDown className="w-3 h-3"/>)}
+                </button>
+              ))}
+            </div>
+          )}
           {isMobile ? (
             <div className="divide-y divide-gray-100">
               {filteredTransactions.map((transaction) => (
