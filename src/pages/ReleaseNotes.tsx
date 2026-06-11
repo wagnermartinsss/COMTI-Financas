@@ -3,6 +3,15 @@ import { Tag, CheckCircle2, Wrench, Download, Upload } from 'lucide-react';
 
 const releases = [
   {
+    version: '1.0.4',
+    date: '10 de Junho de 2026',
+    features: [
+      'Adicionada opção de ordenação na tela de importação de CSV. Agora é possível classificar a lista de transações a serem importadas por data, descrição, categoria, responsável e valor.'
+    ],
+    fixes: [],
+    improvements: []
+  },
+  {
     version: '1.0.3',
     date: '10 de Junho de 2026',
     features: [

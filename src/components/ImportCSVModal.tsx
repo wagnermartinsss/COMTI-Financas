@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Upload, Check, AlertCircle, CreditCard, User } from 'lucide-react';
+import { X, Upload, Check, AlertCircle, CreditCard, User, ChevronUp, ChevronDown } from 'lucide-react';
 import Papa from 'papaparse';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, addDoc, query, where, getDocs } from 'firebase/firestore';
@@ -138,6 +138,8 @@ export default function ImportCSVModal({ isOpen, onClose, onSuccess, currentDate
   const [addingCategoryForTxId, setAddingCategoryForTxId] = useState<string | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [showOnlyNew, setShowOnlyNew] = useState(false);
+  const [sortField, setSortField] = useState<'date' | 'description' | 'category' | 'responsible' | 'amount'>('date');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const defaultCategories = [
@@ -364,7 +366,6 @@ export default function ImportCSVModal({ isOpen, onClose, onSuccess, currentDate
     setTransactions(prev => {
       const currentTx = prev.find(t => t.id === id);
       
-      // Auto-update other identical descriptions when category changes
       if (field === 'category' && currentTx) {
         return prev.map(t => 
           (t.id === id || t.description === currentTx.description) 
@@ -379,12 +380,51 @@ export default function ImportCSVModal({ isOpen, onClose, onSuccess, currentDate
         if (['description', 'amount', 'date', 'responsible'].includes(field)) {
           updatedTx.hash = generateHash(updatedTx.description, updatedTx.amount, updatedTx.date, updatedTx.responsible);
           updatedTx.isDuplicate = checkDuplicate(updatedTx.hash, existingTransactions);
-          // Auto deselect if it becomes duplicate
           if (updatedTx.isDuplicate && !t.isDuplicate) updatedTx.selected = false;
         }
         return updatedTx;
       });
     });
+  };
+
+  const handleSort = (field: 'date' | 'description' | 'category' | 'responsible' | 'amount') => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortedTransactions = () => {
+    let result = [...transactions];
+    if (showOnlyNew) {
+      result = result.filter(t => !t.isDuplicate);
+    }
+    
+    result.sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case 'date':
+          comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
+          break;
+        case 'description':
+          comparison = (a.description || '').localeCompare(b.description || '');
+          break;
+        case 'category':
+          comparison = (a.category || '').localeCompare(b.category || '');
+          break;
+        case 'responsible':
+          comparison = (a.responsible || '').localeCompare(b.responsible || '');
+          break;
+        case 'amount':
+          comparison = a.amount - b.amount;
+          break;
+      }
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+    
+    return result;
   };
 
   const handleAddCategory = async (txId: string) => {
@@ -535,15 +575,40 @@ export default function ImportCSVModal({ isOpen, onClose, onSuccess, currentDate
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
                       <th className="p-3 w-10"></th>
-                      <th className="p-3 font-medium text-gray-500">Data</th>
-                      <th className="p-3 font-medium text-gray-500">Descrição</th>
-                      <th className="p-3 font-medium text-gray-500">Categoria</th>
-                      <th className="p-3 font-medium text-gray-500">Responsável</th>
-                      <th className="p-3 font-medium text-gray-500 text-right">Valor</th>
+                      <th className="p-3 font-medium text-gray-500 cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('date')}>
+                        <div className="flex items-center gap-1">
+                          Data
+                          {sortField === 'date' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
+                        </div>
+                      </th>
+                      <th className="p-3 font-medium text-gray-500 cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('description')}>
+                        <div className="flex items-center gap-1">
+                          Descrição
+                          {sortField === 'description' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
+                        </div>
+                      </th>
+                      <th className="p-3 font-medium text-gray-500 cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('category')}>
+                        <div className="flex items-center gap-1">
+                          Categoria
+                          {sortField === 'category' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
+                        </div>
+                      </th>
+                      <th className="p-3 font-medium text-gray-500 cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('responsible')}>
+                        <div className="flex items-center gap-1">
+                          Responsável
+                          {sortField === 'responsible' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
+                        </div>
+                      </th>
+                      <th className="p-3 font-medium text-gray-500 cursor-pointer hover:bg-gray-100 transition-colors text-right" onClick={() => handleSort('amount')}>
+                        <div className="flex items-center justify-end gap-1">
+                          Valor
+                          {sortField === 'amount' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
+                        </div>
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {transactions.filter(t => showOnlyNew ? !t.isDuplicate : true).map((t) => (
+                    {getSortedTransactions().map((t) => (
                       <tr key={t.id} className={
                         t.selected ? (t.isDuplicate ? 'bg-orange-50' : 'bg-white') : 'bg-gray-50 opacity-60'
                       }>
