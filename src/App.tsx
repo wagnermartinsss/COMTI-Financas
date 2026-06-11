@@ -10,6 +10,7 @@ import Dashboard from './pages/Dashboard';
 import Transactions from './pages/Transactions';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
+import ReleaseNotes from './pages/ReleaseNotes';
 import Onboarding from './pages/Onboarding';
 import Invite from './pages/Invite';
 import { Toaster } from 'react-hot-toast';
@@ -65,6 +66,7 @@ export default function App() {
                 <Route index element={<Dashboard />} />
                 <Route path="transactions" element={<Transactions />} />
                 <Route path="reports" element={<Reports />} />
+                <Route path="releases" element={<ReleaseNotes />} />
                 <Route path="settings" element={<Settings />} />
               </Route>
             </Routes>

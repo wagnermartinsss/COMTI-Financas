@@ -3,7 +3,7 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../lib/firebase';
 import { signOut } from 'firebase/auth';
-import { LayoutDashboard, ListOrdered, Settings, LogOut, Wallet, FileBarChart, Menu, X as CloseIcon } from 'lucide-react';
+import { LayoutDashboard, ListOrdered, Settings, LogOut, Wallet, FileBarChart, Menu, X as CloseIcon, Tag } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export default function Layout() {
@@ -36,6 +36,7 @@ export default function Layout() {
     { path: '/', label: 'Início', icon: LayoutDashboard },
     { path: '/transactions', label: 'Transações', icon: ListOrdered },
     { path: '/reports', label: 'Relatórios', icon: FileBarChart },
+    { path: '/releases', label: 'Versões', icon: Tag },
     { path: '/settings', label: 'Ajustes', icon: Settings },
   ];
 
@@ -171,7 +172,7 @@ export default function Layout() {
               key={item.path}
               to={item.path}
               className={cn(
-                "flex flex-col items-center gap-1 px-3 py-1 rounded-lg transition-colors",
+                "flex flex-col items-center gap-1 px-1 sm:px-2 py-1 rounded-lg transition-colors",
                 isActive ? "text-blue-600" : "text-gray-500"
               )}
             >
