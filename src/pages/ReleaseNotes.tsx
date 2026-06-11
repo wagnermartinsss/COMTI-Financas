@@ -3,17 +3,21 @@ import { Tag, CheckCircle2, Wrench, Download, Upload } from 'lucide-react';
 
 const releases = [
   {
-    version: '1.0.0',
+    version: '1.0.3',
     date: '10 de Junho de 2026',
     features: [
-      'Lançamento inicial da aplicação.',
-      'Gestão de transações de entrada e saída.',
-      'Suporte para transações recorrentes e parceladas.',
-      'Categorização de despesas e receitas.',
-      'Dashboards interativos com gráficos e resumos.',
-      'Menu de ajustes para gerenciar categorias e preferências.'
+      'Na tela de importação de CSV, agora o botão "Mês Atual" fica disponível para qualquer despesa (não apenas nas parceladas) que esteja em um mês diferente da visualização atual da importação.'
     ],
     fixes: [],
+    improvements: []
+  },
+  {
+    version: '1.0.2',
+    date: '10 de Junho de 2026',
+    features: [],
+    fixes: [
+      'Aprimorada a identificação de categorias na importação de faturas via CSV. O sistema agora verifica seu histórico para encontrar categorias de despesas equivalentes.',
+    ],
     improvements: []
   },
   {
@@ -30,6 +34,20 @@ const releases = [
     improvements: [
       'Otimizada a tela de configurações para suportar backups com segurança e feedbacks visuais.'
     ]
+  },
+  {
+    version: '1.0.0',
+    date: '10 de Junho de 2026',
+    features: [
+      'Lançamento inicial da aplicação.',
+      'Gestão de transações de entrada e saída.',
+      'Suporte para transações recorrentes e parceladas.',
+      'Categorização de despesas e receitas.',
+      'Dashboards interativos com gráficos e resumos.',
+      'Menu de ajustes para gerenciar categorias e preferências.'
+    ],
+    fixes: [],
+    improvements: []
   }
 ];
 
@@ -47,7 +65,7 @@ export default function ReleaseNotes() {
       </div>
 
       <div className="space-y-6">
-        {[...releases].reverse().map((release) => (
+        {releases.map((release) => (
           <div key={release.version} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 relative overflow-hidden">
             <div className="absolute top-0 right-0 bg-blue-50 text-blue-700 px-4 py-1.5 rounded-bl-2xl font-semibold text-sm">
               v{release.version}

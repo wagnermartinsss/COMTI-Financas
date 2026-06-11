@@ -13,6 +13,7 @@ interface ImportCSVModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  currentDate: Date;
 }
 
 interface ParsedTransaction {
@@ -73,14 +74,19 @@ const AmountInput = ({ amount, onChange }: { amount: number, onChange: (val: num
   );
 };
 
-const DateInput = ({ date, isInstallment, onChange }: { date: string, isInstallment: boolean, onChange: (val: string) => void }) => {
+const DateInput = ({ date, isInstallment, baseCurrentDate, onChange }: { date: string, isInstallment: boolean, baseCurrentDate: Date, onChange: (val: string) => void }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [tempValue, setTempValue] = useState(date.split('T')[0]);
 
+  const txDate = new Date(date);
+  const isDifferentMonth = txDate.getMonth() !== baseCurrentDate.getMonth() || txDate.getFullYear() !== baseCurrentDate.getFullYear();
+
   const handleSetCurrentMonth = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const now = new Date();
-    onChange(now.toISOString());
+    const newDate = new Date(baseCurrentDate);
+    newDate.setDate(Math.min(txDate.getDate(), new Date(newDate.getFullYear(), newDate.getMonth() + 1, 0).getDate()));
+    newDate.setHours(12, 0, 0, 0);
+    onChange(newDate.toISOString());
   }
 
   if (isEditing) {
@@ -108,13 +114,13 @@ const DateInput = ({ date, isInstallment, onChange }: { date: string, isInstallm
         className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded text-gray-700 font-medium"
         title="Clique para alterar a data"
       >
-        {format(new Date(date), "dd/MM/yy", { locale: ptBR })}
+        {format(txDate, "dd/MM/yy", { locale: ptBR })}
       </div>
-      {isInstallment && (
+      {(isInstallment || isDifferentMonth) && (
         <button 
           onClick={handleSetCurrentMonth}
           className="text-[10px] text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-1.5 py-0.5 rounded font-medium"
-          title="Mover para o mês atual"
+          title="Mover para o mês sendo visualizado"
         >
           Mês Atual
         </button>
@@ -123,7 +129,7 @@ const DateInput = ({ date, isInstallment, onChange }: { date: string, isInstallm
   );
 };
 
-export default function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSVModalProps) {
+export default function ImportCSVModal({ isOpen, onClose, onSuccess, currentDate }: ImportCSVModalProps) {
   const { ownerId, user } = useAuth();
   const [step, setStep] = useState<1 | 2>(1);
   const [transactions, setTransactions] = useState<ParsedTransaction[]>([]);
@@ -185,10 +191,25 @@ export default function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSV
 
   if (!isOpen) return null;
 
-  const suggestCategory = (description: string) => {
+  const suggestCategory = (description: string, historicalTransactions: any[]) => {
+    const descLower = description.toLowerCase().trim();
+    
+    // Removemos parcelamentos da descrição para comparar melhor (ex: LITE *VIVOEASY PARCELA 2/12)
+    const cleanDesc = descLower.replace(/(?:parcela\s*)?(\d{1,2})\s*(?:\/|de)\s*(\d{1,2})/i, '').trim();
+
+    // Busca no histórico
+    const matchedTx = historicalTransactions.find(tx => {
+      const txDesc = (tx.description || '').toLowerCase().replace(/(?:parcela\s*)?(\d{1,2})\s*(?:\/|de)\s*(\d{1,2})/i, '').trim();
+      return txDesc === cleanDesc && tx.category;
+    });
+
+    if (matchedTx && matchedTx.category) {
+      return matchedTx.category;
+    }
+
     const desc = description.toLowerCase();
     if (desc.includes('uber') || desc.includes('99') || desc.includes('posto') || desc.includes('combustivel')) return 'Transporte';
-    if (desc.includes('ifood') || desc.includes('rappi') || desc.includes('restaurante') || desc.includes('padaria') || desc.includes('mercado') || desc.includes('supermercado')) return 'Alimentação';
+    if (desc.includes('ifood') || desc.includes('rappi') || desc.includes('restaurante') || desc.includes('padaria') || desc.includes('mercado') || desc.includes('supermercado') || desc.includes('ifd*')) return 'Alimentação';
     if (desc.includes('netflix') || desc.includes('spotify') || desc.includes('cinema') || desc.includes('ingresso')) return 'Lazer';
     if (desc.includes('farmacia') || desc.includes('droga') || desc.includes('hospital') || desc.includes('clinica')) return 'Saúde';
     return 'Outros';
@@ -309,7 +330,7 @@ export default function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSV
                 date: isoDate,
                 description,
                 amount,
-                category: suggestCategory(description),
+                category: suggestCategory(description, existingTransactions),
                 responsible,
                 type,
                 source: 'credit_card',
@@ -538,6 +559,7 @@ export default function ImportCSVModal({ isOpen, onClose, onSuccess }: ImportCSV
                           <DateInput 
                             date={t.date} 
                             isInstallment={t.isInstallment}
+                            baseCurrentDate={currentDate}
                             onChange={(newDate) => handleTransactionChange(t.id, 'date', newDate)}
                           />
                         </td>

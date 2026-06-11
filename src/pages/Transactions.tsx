@@ -558,6 +558,7 @@ export default function Transactions() {
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         onSuccess={() => setIsImportModalOpen(false)}
+        currentDate={currentDate}
       />
 
       {transactionToDelete && (
