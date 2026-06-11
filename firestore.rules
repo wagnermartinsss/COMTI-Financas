@@ -66,7 +66,7 @@ service cloud.firestore {
              (!('installmentId' in data) || data.installmentId is string) &&
              (!('hash' in data) || data.hash is string) &&
              (!('importBatchId' in data) || data.importBatchId is string) &&
-             (!('dueDate' in data) || data.dueDate == null || data.dueDate is number) &&
+             (!('dueDate' in data) || data.dueDate == null || data.dueDate is number || data.dueDate is string) &&
              (!('isPaid' in data) || data.isPaid is bool);
     }
 

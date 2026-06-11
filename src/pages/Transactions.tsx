@@ -5,7 +5,7 @@ import { db, handleFirestoreError, OperationType, auth } from '../lib/firebase';
 import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, addDoc, updateDoc } from 'firebase/firestore';
 import { formatCurrency } from '../lib/utils';
 import { Plus, Trash2, ArrowUpCircle, ArrowDownCircle, RefreshCw, CalendarPlus, Upload, CreditCard, User, Search, Filter, X, ChevronUp, ChevronDown, ArrowUpDown } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import MonthSelector from '../components/MonthSelector';
 import TransactionModal from '../components/TransactionModal';

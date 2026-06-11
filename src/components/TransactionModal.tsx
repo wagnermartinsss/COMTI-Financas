@@ -82,7 +82,6 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
       setType('expense');
       setAmountStr('');
       setCategory('');
-      setDescription('');
       setDate(new Date().toISOString().split('T')[0]);
       setResponsible('');
       setSource('manual');
@@ -252,7 +251,7 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
           };
           if (responsible) txData.responsible = responsible;
           if (type === 'expense' && dueDate !== '') {
-            txData.dueDate = parseInt(dueDate.toString(), 10);
+            txData.dueDate = dueDate;
           }
 
           await addDoc(collection(db, 'transactions'), txData);
@@ -470,7 +469,7 @@ export default function TransactionModal({ isOpen, onClose, transactionToEdit }:
               </div>
             </div>
 
-            {type === 'expense' && (isRecurring || (transactionToEdit && transactionToEdit.recurringId)) && (
+              {type === 'expense' && (isRecurring || (transactionToEdit && transactionToEdit.recurringId)) && (
               <div className="pt-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Dia do Vencimento (1 a 31)</label>
                 <input

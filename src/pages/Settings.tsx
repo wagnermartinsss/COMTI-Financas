@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, query, where, onSnapshot, addDoc, doc, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
-import { Mail, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { collection, query, where, onSnapshot, addDoc, doc, updateDoc, deleteDoc, getDocs, writeBatch } from 'firebase/firestore';
+import { Mail, CheckCircle, XCircle, Clock, Download, Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface Invite {
@@ -22,6 +22,9 @@ export default function Settings() {
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -212,6 +215,229 @@ const handleConfirmDeleteAccount = async () => {
   }
 };
 
+  const handleExportBackup = async () => {
+    if (!user) return;
+    setIsExporting(true);
+    try {
+      const ownerId = userProfile?.partnerId || user.uid;
+      
+      const exportData: any = {
+        transactions: [],
+        categories: [],
+        recurringTransactions: [],
+        recurringSkips: [],
+        exportDate: new Date().toISOString(),
+        version: '1.0'
+      };
+
+      const [txSnap, catSnap, recSnap, skipsSnap] = await Promise.all([
+        getDocs(query(collection(db, 'transactions'), where('ownerId', '==', ownerId))),
+        getDocs(query(collection(db, 'categories'), where('ownerId', '==', ownerId))),
+        getDocs(query(collection(db, 'recurringTransactions'), where('ownerId', '==', ownerId))),
+        getDocs(query(collection(db, 'recurringSkips'), where('ownerId', '==', ownerId)))
+      ]);
+
+      txSnap.forEach(doc => exportData.transactions.push({ _id: doc.id, ...doc.data() }));
+      catSnap.forEach(doc => exportData.categories.push({ _id: doc.id, ...doc.data() }));
+      recSnap.forEach(doc => exportData.recurringTransactions.push({ _id: doc.id, ...doc.data() }));
+      skipsSnap.forEach(doc => exportData.recurringSkips.push({ _id: doc.id, ...doc.data() }));
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `backup_financas_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      toast.success('Backup exportado com sucesso!');
+    } catch (error) {
+      console.error(error);
+      toast.error('Erro ao exportar backup');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const [showImportConfirm, setShowImportConfirm] = useState(false);
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setPendingImportFile(file);
+    setShowImportConfirm(true);
+  };
+
+  const executeImport = async () => {
+    if (!pendingImportFile || !user) {
+       setShowImportConfirm(false);
+       return;
+    }
+    const file = pendingImportFile;
+    setShowImportConfirm(false);
+
+    const ownerId = userProfile?.partnerId || user.uid;
+
+    setIsImporting(true);
+    try {
+      const text = await file.text();
+      const importData = JSON.parse(text);
+
+      if (!importData.transactions || !importData.categories) {
+        throw new Error('Formato de arquivo inválido');
+      }
+
+      // Clear existing data
+      const [txSnap, catSnap, recSnap, skipsSnap] = await Promise.all([
+        getDocs(query(collection(db, 'transactions'), where('ownerId', '==', ownerId))),
+        getDocs(query(collection(db, 'categories'), where('ownerId', '==', ownerId))),
+        getDocs(query(collection(db, 'recurringTransactions'), where('ownerId', '==', ownerId))),
+        getDocs(query(collection(db, 'recurringSkips'), where('ownerId', '==', ownerId)))
+      ]);
+
+      // Build maps for existing data
+      const existingTxs = new Map(txSnap.docs.map(doc => [doc.id, doc.data()]));
+      const existingCats = new Map(catSnap.docs.map(doc => [doc.id, doc.data()]));
+      const existingRecs = new Map(recSnap.docs.map(doc => [doc.id, doc.data()]));
+      const existingSkips = new Map(skipsSnap.docs.map(doc => [doc.id, doc.data()]));
+
+      let batch = writeBatch(db);
+      let opCount = 0;
+
+      const commitBatchIfNeeded = async () => {
+        if (opCount >= 450) {
+          await batch.commit();
+          batch = writeBatch(db);
+          opCount = 0;
+        }
+      };
+
+      // Find IDs in import data
+      const importTxIds = new Set(importData.transactions.map((t: any) => t._id).filter(Boolean));
+      const importCatIds = new Set(importData.categories.map((c: any) => c._id).filter(Boolean));
+      const importRecIds = new Set((importData.recurringTransactions || []).map((r: any) => r._id).filter(Boolean));
+      const importSkipsIds = new Set((importData.recurringSkips || []).map((s: any) => s._id).filter(Boolean));
+
+      // ONLY delete docs that are NOT in the import data
+      for (const docSnap of txSnap.docs) {
+        if (!importTxIds.has(docSnap.id)) {
+          batch.delete(docSnap.ref);
+          opCount++;
+          await commitBatchIfNeeded();
+        }
+      }
+      for (const docSnap of catSnap.docs) {
+        if (!importCatIds.has(docSnap.id)) {
+          batch.delete(docSnap.ref);
+          opCount++;
+          await commitBatchIfNeeded();
+        }
+      }
+      for (const docSnap of recSnap.docs) {
+        if (!importRecIds.has(docSnap.id)) {
+          batch.delete(docSnap.ref);
+          opCount++;
+          await commitBatchIfNeeded();
+        }
+      }
+      for (const docSnap of skipsSnap.docs) {
+        if (!importSkipsIds.has(docSnap.id)) {
+          batch.delete(docSnap.ref);
+          opCount++;
+          await commitBatchIfNeeded();
+        }
+      }
+
+      // Add or update new data
+      for (const item of importData.transactions) {
+        const id = item._id;
+        const ref = id ? doc(db, 'transactions', id) : doc(collection(db, 'transactions'));
+        const { _id, ...data } = item;
+        
+        let txData = { ...data, ownerId };
+        // Rules enforcement: Se não existia (create), creatorId PRECISA ser o usuario logado
+        if (!existingTxs.has(id)) {
+           txData.creatorId = user.uid;
+        } else {
+           // Se existia (update), creatorId, createdAt, e ownerId TEM QUE SER os mesmos do original
+           const existing = existingTxs.get(id);
+           txData.creatorId = existing.creatorId;
+           txData.createdAt = existing.createdAt || txData.createdAt;
+           txData.ownerId = existing.ownerId;
+        }
+
+        batch.set(ref, txData);
+        opCount++;
+        await commitBatchIfNeeded();
+      }
+
+      for (const item of importData.categories) {
+        const id = item._id;
+        const ref = id ? doc(db, 'categories', id) : doc(collection(db, 'categories'));
+        const { _id, ...data } = item;
+        
+        let catData = { ...data, ownerId };
+        // Validations for categories
+        if (!existingCats.has(id)) {
+           // Create
+        } else {
+           const existing = existingCats.get(id);
+           catData.ownerId = existing.ownerId;
+        }
+
+        batch.set(ref, catData);
+        opCount++;
+        await commitBatchIfNeeded();
+      }
+
+      if (importData.recurringTransactions) {
+        for (const item of importData.recurringTransactions) {
+          const id = item._id;
+          const ref = id ? doc(db, 'recurringTransactions', id) : doc(collection(db, 'recurringTransactions'));
+          const { _id, ...data } = item;
+          
+          let recData = { ...data, ownerId };
+          if (!existingRecs.has(id)) {
+             recData.creatorId = user.uid;
+          } else {
+             const existing = existingRecs.get(id);
+             recData.creatorId = existing.creatorId;
+             recData.createdAt = existing.createdAt || recData.createdAt;
+             recData.ownerId = existing.ownerId;
+          }
+
+          batch.set(ref, recData);
+          opCount++;
+          await commitBatchIfNeeded();
+        }
+      }
+
+      if (importData.recurringSkips) {
+        for (const item of importData.recurringSkips) {
+          const id = item._id;
+          const ref = id ? doc(db, 'recurringSkips', id) : doc(collection(db, 'recurringSkips'));
+          const { _id, ...data } = item;
+          batch.set(ref, { ...data, ownerId });
+          opCount++;
+          await commitBatchIfNeeded();
+        }
+      }
+
+      if (opCount > 0) {
+        await batch.commit();
+      }
+
+      toast.success('Backup restaurado com sucesso!');
+    } catch (error) {
+      console.error("IMPORT ERROR:", error);
+      toast.error('Erro ao restaurar backup. Verifique se o arquivo é válido.');
+    } finally {
+      setIsImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-3xl">
       <h1 className="text-2xl font-bold text-gray-900">Configurações</h1>
@@ -331,6 +557,48 @@ const handleConfirmDeleteAccount = async () => {
         </div>
       )}
 
+      {/* Backup e Restauração */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-2">Backup de Dados</h2>
+        <p className="text-sm text-gray-500 mb-6">
+          Exporte seus dados financeiros (transações, categorias, recorrências) para um arquivo JSON ou importe um backup existente. <strong>Atenção: A importação apagará os dados atuais e os substituirá.</strong>
+        </p>
+        <div className="flex flex-col sm:flex-row gap-4">
+          <button
+            onClick={handleExportBackup}
+            disabled={isExporting}
+            className="flex items-center justify-center gap-2 px-6 py-2.5 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" />
+            {isExporting ? 'Exportando...' : 'Exportar Backup'}
+          </button>
+
+          <div>
+            <input
+              id="file-upload"
+              type="file"
+              accept=".json"
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <button
+              onClick={(e) => {
+                if (fileInputRef.current) {
+                  fileInputRef.current.value = '';
+                  fileInputRef.current.click();
+                }
+              }}
+              disabled={isImporting}
+              className="flex items-center justify-center gap-2 px-6 py-2.5 w-full sm:w-auto border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              <Upload className="w-4 h-4" />
+              {isImporting ? 'Importando...' : 'Importar Backup'}
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Zona de Perigo */}
       <div className="bg-white rounded-2xl shadow-sm border border-red-100 p-6">
         <h2 className="text-lg font-semibold text-red-600 mb-2">Zona de Perigo</h2>
@@ -346,6 +614,36 @@ const handleConfirmDeleteAccount = async () => {
       </div>
 
       {/* Modals */}
+      {showImportConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Restaurar Backup</h3>
+            <p className="text-gray-600 mb-6">
+              Atenção: Restaurar um backup irá <strong>APAGAR</strong> todos os seus dados atuais e substituí-los pelos dados do arquivo. Deseja continuar?
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowImportConfirm(false);
+                  setPendingImportFile(null);
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl font-medium transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={executeImport}
+                className="px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
+                disabled={isImporting}
+              >
+                {isImporting ? 'Restaurando...' : 'Restaurar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showDisconnectModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
