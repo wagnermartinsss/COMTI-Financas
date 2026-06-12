@@ -6,7 +6,8 @@ const releases = [
     version: '12/06/2026',
     date: '12 de Junho de 2026',
     features: [
-      'Implementado novas opções de formatação no Relatório Completo PDF de despesas.'
+      'Implementado novas opções de formatação no Relatório Completo PDF de despesas.',
+      'Desenvolvimento do painel de Insights Rápidos (Destaques do Mês) integrado ao Dashboard, com detecção automática de métricas cruciais (maior despesa única, categoria recordista, gasto médio diário, margem de poupança) e bloco de conselho personalizado conforme as finanças do usuário.'
     ],
     fixes: [
       'Ordenamento cronológico de data crescente das despesas no relatório.',
