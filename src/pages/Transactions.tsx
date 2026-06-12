@@ -361,16 +361,16 @@ export default function Transactions() {
                   onClick={() => handleTransactionClick(transaction)}
                   className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
                 >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex items-center gap-3">
+                  <div className="flex justify-between items-start gap-4 mb-2">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                         transaction.type === 'income' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
                       }`}>
                         {transaction.type === 'income' ? <ArrowUpCircle className="w-4 h-4" /> : <ArrowDownCircle className="w-4 h-4" />}
                       </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-gray-900 truncate">{transaction.description}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-medium text-gray-900 truncate max-w-[140px] xs:max-w-[180px] sm:max-w-[240px]">{transaction.description}</span>
                           {transaction.recurringId && (
                             <RefreshCw className="w-3 h-3 text-blue-500 flex-shrink-0" title="Transação Recorrente" />
                           )}
@@ -383,8 +383,8 @@ export default function Transactions() {
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <p className="text-xs text-gray-500">{transaction.category}</p>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <p className="text-xs text-gray-500 truncate max-w-[100px]">{transaction.category}</p>
                           {transaction.type === 'expense' && transaction.dueDate && (
                             <span className="flex items-center gap-1 text-[10px] font-medium text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
                               Venc: Dia {transaction.dueDate}
@@ -401,20 +401,20 @@ export default function Transactions() {
                             </button>
                           )}
                           {transaction.responsible && (
-                            <span className="flex items-center gap-1 text-[10px] font-medium text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                              <User className="w-3 h-3" />
-                              {transaction.responsible}
+                            <span className="flex items-center gap-1 text-[10px] font-medium text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded truncate max-w-[80px]">
+                              <User className="w-3 h-3 flex-shrink-0" />
+                              <span className="truncate">{transaction.responsible}</span>
                             </span>
                           )}
                         </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className={`font-bold ${
+                    <div className="text-right flex-shrink-0 ml-2">
+                      <p className={`font-bold text-sm whitespace-nowrap ${
                         transaction.isPending ? 'text-orange-500' : transaction.type === 'income' ? 'text-green-600' : 'text-red-600'
                       }`}>
                         {transaction.isPending ? (
-                          <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold uppercase">A definir</span>
+                          <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold uppercase whitespace-nowrap">A definir</span>
                         ) : (
                           <>{transaction.type === 'income' ? '+' : '-'} {formatCurrency(transaction.amount)}</>
                         )}

@@ -256,9 +256,9 @@ export default function Dashboard() {
                           <Pie
                             data={pieData}
                             cx="50%"
-                            cy={isMobile ? "40%" : "50%"}
-                            innerRadius={isMobile ? 60 : 70}
-                            outerRadius={isMobile ? 80 : 110}
+                            cy={isMobile ? "35%" : "50%"}
+                            innerRadius={isMobile ? 40 : 70}
+                            outerRadius={isMobile ? 65 : 110}
                             dataKey="value"
                             isAnimationActive={false}
                           >
