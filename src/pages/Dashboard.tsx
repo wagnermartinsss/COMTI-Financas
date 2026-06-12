@@ -252,13 +252,13 @@ export default function Dashboard() {
                   {pieData.length > 0 ? (
                     <div className="h-[360px] w-full min-h-0 min-w-0">
                       <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
+                        <PieChart margin={isMobile ? { top: 10, right: 10, bottom: 40, left: 10 } : { top: 0, right: 0, bottom: 0, left: 0 }}>
                           <Pie
                             data={pieData}
                             cx="50%"
-                            cy={isMobile ? "35%" : "50%"}
-                            innerRadius={isMobile ? 40 : 70}
-                            outerRadius={isMobile ? 65 : 110}
+                            cy={isMobile ? "45%" : "50%"}
+                            innerRadius={isMobile ? 35 : 70}
+                            outerRadius={isMobile ? 55 : 110}
                             dataKey="value"
                             isAnimationActive={false}
                           >

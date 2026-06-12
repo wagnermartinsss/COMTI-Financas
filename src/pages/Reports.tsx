@@ -415,19 +415,19 @@ export default function Reports() {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-end">
           <div className="md:col-span-5">
             <label className="block text-sm font-medium text-gray-700 mb-2">Período</label>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full min-w-0">
               <input 
                 type="date" 
                 value={startDate}
                 onChange={e => setStartDate(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium text-gray-700"
+                className="flex-1 min-w-0 w-full px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium text-gray-700"
               />
-              <span className="text-gray-400 text-xs font-semibold uppercase px-1 shrink-0">até</span>
+              <span className="text-gray-400 text-[11px] sm:text-xs font-semibold uppercase px-0.5 sm:px-1 shrink-0">até</span>
               <input 
                 type="date" 
                 value={endDate}
                 onChange={e => setEndDate(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium text-gray-700"
+                className="flex-1 min-w-0 w-full px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium text-gray-700"
               />
             </div>
           </div>
