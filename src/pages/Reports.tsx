@@ -72,40 +72,41 @@ export default function Reports() {
     fetchCategories();
   }, [ownerId]);
 
+  const fetchTransactions = async () => {
+    if (!ownerId || !startDate || !endDate) return;
+    
+    setLoading(true);
+    try {
+      const startDateISO = new Date(startDate + 'T00:00:00').toISOString();
+      const endDateISO = new Date(endDate + 'T23:59:59').toISOString();
+
+      const q = query(
+        collection(db, 'transactions'),
+        where('ownerId', '==', ownerId),
+        where('date', '>=', startDateISO),
+        where('date', '<=', endDateISO),
+        orderBy('date', 'desc')
+      );
+
+      const snapshot = await getDocs(q);
+      const data: Transaction[] = [];
+      snapshot.forEach((doc) => {
+        data.push({ id: doc.id, ...doc.data() } as Transaction);
+      });
+
+      setTransactions(data);
+    } catch (error) {
+      console.error("Error fetching transactions", error);
+      toast.error("Erro ao carregar dados do relatório");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    if (!ownerId) return;
-
-    const fetchTransactions = async () => {
-      setLoading(true);
-      try {
-        const startDateISO = new Date(startDate + 'T00:00:00Z').toISOString();
-        const endDateISO = new Date(endDate + 'T23:59:59Z').toISOString();
-
-        const q = query(
-          collection(db, 'transactions'),
-          where('ownerId', '==', ownerId),
-          where('date', '>=', startDateISO),
-          where('date', '<=', endDateISO),
-          orderBy('date', 'desc')
-        );
-
-        const snapshot = await getDocs(q);
-        const data: Transaction[] = [];
-        snapshot.forEach((doc) => {
-          data.push({ id: doc.id, ...doc.data() } as Transaction);
-        });
-
-        setTransactions(data);
-      } catch (error) {
-        console.error("Error fetching transactions", error);
-        toast.error("Erro ao carregar dados do relatório");
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchTransactions();
-  }, [ownerId, startDate, endDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownerId]);
 
   const toggleCategory = (cat: string) => {
     setSelectedCategories(prev => 
@@ -259,9 +260,14 @@ export default function Reports() {
       let currentY = 40;
 
       Object.entries(groupedExpenses).forEach(([category, txs]) => {
-        const categoryTxs = txs as Transaction[];
-        // Check if we need a new page
-        if (currentY > doc.internal.pageSize.getHeight() - 40) {
+        const sortedCategoryTxs = [...txs as Transaction[]].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        
+        // Intelligent, proportional page-breaking algorithm to balance page content distribution
+        const estimatedHeight = 15 + 10 + (sortedCategoryTxs.length * 8) + 12;
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const maxContentY = pageHeight - 20; // Safe bottom margin
+
+        if (currentY > maxContentY - 50 || (estimatedHeight < (maxContentY - 25) && currentY + estimatedHeight > maxContentY)) {
           doc.addPage();
           currentY = 25;
         }
@@ -274,7 +280,7 @@ export default function Reports() {
         currentY += 4;
 
         const tableColumn = ["Data", "Descrição", "Valor"];
-        const tableRows = categoryTxs.map(t => [
+        const tableRows = sortedCategoryTxs.map(t => [
           format(new Date(t.date.split('T')[0] + 'T12:00:00'), "dd/MM/yyyy"),
           t.description,
           formatCurrency(t.amount)
@@ -300,12 +306,22 @@ export default function Reports() {
           columnStyles: {
             2: { halign: 'right' }
           },
+          didParseCell: (data) => {
+            if (data.section === 'body') {
+              if (data.column.index === 1) { // Descrição
+                data.cell.styles.fontStyle = 'bold';
+              }
+              if (data.column.index === 2) { // Valor
+                data.cell.styles.textColor = [220, 38, 38]; // Red for expenses
+              }
+            }
+          },
           margin: { left: 14, right: 14 }
         });
 
         currentY = (doc as any).lastAutoTable.finalY + 8;
         
-        const categoryTotal = categoryTxs.reduce((sum, t) => sum + t.amount, 0);
+        const categoryTotal = sortedCategoryTxs.reduce((sum, t) => sum + t.amount, 0);
         doc.setFontSize(10);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(17, 24, 39); // Almost black
@@ -317,7 +333,7 @@ export default function Reports() {
       });
 
       // Final total of expenses
-      if (currentY > doc.internal.pageSize.getHeight() - 30) {
+      if (currentY > doc.internal.pageSize.getHeight() - 40) {
         doc.addPage();
         currentY = 25;
       } else {
@@ -390,39 +406,38 @@ export default function Reports() {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-6">
-        <div className="flex items-center gap-2 text-gray-700 font-semibold mb-4">
-          <Filter className="w-5 h-5" />
-          <h2>Filtros</h2>
+        <div className="flex items-center gap-2 text-gray-700 font-semibold mb-2 border-b border-gray-50 pb-3">
+          <Filter className="w-5 h-5 text-blue-600" />
+          <h2>Filtros de Pesquisa</h2>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div>
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-end">
+          <div className="md:col-span-5">
             <label className="block text-sm font-medium text-gray-700 mb-2">Período</label>
-            <div className="flex flex-col xl:flex-row gap-2 xl:items-center">
+            <div className="flex items-center gap-2">
               <input 
                 type="date" 
                 value={startDate}
                 onChange={e => setStartDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-w-[130px]"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium text-gray-700"
               />
-              <span className="text-gray-500 text-center hidden xl:block">até</span>
+              <span className="text-gray-400 text-xs font-semibold uppercase px-1 shrink-0">até</span>
               <input 
                 type="date" 
                 value={endDate}
                 onChange={e => setEndDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-w-[130px]"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium text-gray-700"
               />
             </div>
           </div>
 
-          <div>
+          <div className="md:col-span-2">
             <label className="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
             <select 
               value={typeFilter}
               onChange={e => setTypeFilter(e.target.value as any)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium text-gray-700"
             >
               <option value="all">Todos</option>
               <option value="income">Receitas</option>
@@ -430,16 +445,17 @@ export default function Reports() {
             </select>
           </div>
 
-          <div>
+          <div className="md:col-span-3">
             <label className="block text-sm font-medium text-gray-700 mb-2">Categorias</label>
             <div className="relative">
               <div 
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white cursor-pointer flex justify-between items-center"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white cursor-pointer flex justify-between items-center font-medium text-gray-700"
                 onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
               >
                 <span className="truncate">
                   {selectedCategories.length === 0 ? 'Todas as categorias' : `${selectedCategories.length} selecionadas`}
                 </span>
+                <span className="text-gray-400 text-[10px] ml-2">▼</span>
               </div>
               {isCategoryDropdownOpen && (
                 <>
@@ -472,6 +488,16 @@ export default function Reports() {
               )}
             </div>
           </div>
+
+          <div className="md:col-span-2">
+            <button
+              onClick={fetchTransactions}
+              disabled={loading}
+              className="w-full h-[38px] flex items-center justify-center bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Carregando...' : 'Filtrar'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -498,7 +524,7 @@ export default function Reports() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Chart */}
+                {/* Chart */}
             <div className="lg:col-span-1 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="p-6 border-b border-gray-100">
                 <h2 className="text-lg font-semibold text-gray-900">Despesas por Categoria</h2>
