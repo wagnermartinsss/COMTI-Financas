@@ -3,6 +3,20 @@ import { Tag, CheckCircle2, Wrench, Download, Upload } from 'lucide-react';
 
 const releases = [
   {
+    version: '10/07/2026',
+    date: '10 de Julho de 2026',
+    features: [
+      'Novo Relatório de Despesa Comparativo: Adicionado um novo módulo dinâmico que permite selecionar uma categoria de despesa e analisar sua evolução ao longo dos meses (com períodos de 3, 6, 12 meses ou ano corrente).',
+      'Painel Estatístico Avançado: Visualização do valor total gasto no período, média mensal de despesas da categoria, e indicação do mês de maior recorde de gastos.',
+      'Análise de Tendência Visual: Gráficos de barra integrados detalhando o comportamento de gastos da despesa selecionada ao longo do tempo.',
+      'Tabela Interativa e Retráctil: Lista mensal detalhada por competência com cálculo de variação percentual dinâmica em relação ao mês anterior, e abertura detalhada das transações individuais de cada mês ao clicar.'
+    ],
+    fixes: [],
+    improvements: [
+      'Navegação por Abas: Implementação de abas de filtragem rápida na tela de Relatórios para alternar com elegância e fluidez entre a busca geral tradicional e o novo relatório comparativo de despesa.'
+    ]
+  },
+  {
     version: '12/06/2026',
     date: '12 de Junho de 2026',
     features: [
